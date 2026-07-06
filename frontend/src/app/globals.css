@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #F9F7F4;
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: #E8E0D4;
+  --header-bg: #FFFFFF;
+  --header-border: #E8E0D4;
+  --card-bg: #FFFFFF;
+  --card-border: #E8E0D4;
+  --orange: #FF9933;
+  --orange-hover: #E8831A;
+  --orange-light: #FFF3E0;
+  --orange-text: #CC6600;
+  --text-primary: #111111;
+  --text-secondary: #3D3D3D;
+  --text-muted: #5C5C5C;
+  --nav-active-bg: #FFF3E0;
+  --nav-active-text: #B45309;
+  --nav-hover-bg: #F3EFE8;
+  --nav-text: #292524;
+}
+
+@theme inline {
+  --color-orange-50: #FFF3EB;
+  --color-orange-100: #FFDFB3;
+  --color-orange-200: #FFC070;
+  --color-orange-300: #FFA433;
+  --color-orange-400: #FB6F04; /* Primary Orange */
+  --color-orange-500: #E06003;
+  
+  --color-stone-50: #F5F6F8; /* Light Gray Secondary */
+  --color-stone-100: #E6EAF0;
+  --color-stone-200: #CDD5E0;
+  --color-stone-300: #A8B6CA;
+  --color-stone-400: #7A8DA8;
+  --color-stone-500: #556B89;
+  --color-stone-600: #3E516D;
+  --color-stone-700: #2C3C54;
+  --color-stone-800: #142F55;
+  --color-stone-900: #022656; /* Primary Navy */
+}
+
+body {
+  background-color: var(--color-stone-50);
+  color: var(--color-stone-900);
+  font-family: HelveticaNeue, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  scroll-behavior: smooth;
+}
