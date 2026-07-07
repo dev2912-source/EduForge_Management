@@ -449,6 +449,27 @@ router.get('/classes', protect, async (req, res) => {
     }
 });
 
+// @route   GET /api/admin/classes/:id
+// @desc    Get single class with student count
+// @access  Private (Admin)
+router.get('/classes/:id', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized as an admin' });
+        }
+
+        const cls = await ClassModel.findById(req.params.id).lean();
+        if (!cls) {
+            return res.status(404).json({ success: false, message: 'Class not found' });
+        }
+        const studentsCount = await User.countDocuments({ role: 'student', 'profile.className': cls.name });
+        res.json({ success: true, data: { ...cls, studentsCount } });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server Error' });
+    }
+});
+
 // @route   GET /api/admin/students
 // @desc    Get all students with search, filter, sort, pagination
 // @access  Private (Admin & Staff)
