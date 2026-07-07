@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Download, Edit2, Eye, ChevronDown, Square, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Plus, Download, Edit2, Eye, ChevronDown, Square, ChevronLeft, ChevronRight, Loader2, X, Trash2 } from 'lucide-react';
 
 export default function FeeInvoicesPage() {
     const [invoices, setInvoices] = useState([]);
@@ -12,6 +12,10 @@ export default function FeeInvoicesPage() {
     // Pagination state
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
+    const [showModal, setShowModal] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [formData, setFormData] = useState({ studentName: '', amount: '', dueDate: '', status: 'Pending' });
 
     const fetchInvoices = async () => {
         setLoading(true);
@@ -36,6 +40,66 @@ export default function FeeInvoicesPage() {
     useEffect(() => {
         fetchInvoices();
     }, [page, limit, search]);
+
+    const openAddModal = () => {
+        setEditingItem(null);
+        setFormData({ studentName: '', amount: '', dueDate: '', status: 'Pending' });
+        setShowModal(true);
+    };
+
+    const openEditModal = (item) => {
+        setEditingItem(item);
+        setFormData({ studentName: item.studentName, amount: item.amount, dueDate: item.dueDate, status: item.status });
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingItem(null);
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = editingItem 
+                ? `http://localhost:5000/api/admin/invoices/${editingItem._id}`
+                : 'http://localhost:5000/api/admin/invoices';
+            const method = editingItem ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(formData)
+            });
+            if (res.ok) {
+                closeModal();
+                fetchInvoices();
+            }
+        } catch (error) {
+            console.error('Failed to save invoice', error);
+        }
+        setSubmitting(false);
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this invoice?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:5000/api/admin/invoices/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) fetchInvoices();
+        } catch (error) {
+            console.error('Failed to delete invoice', error);
+        }
+    };
 
     const formatDate = (dateString) => {
         if (!dateString) return '—';
@@ -83,7 +147,7 @@ export default function FeeInvoicesPage() {
                     <button className="flex items-center gap-1.5 py-2 px-4 text-sm font-semibold rounded-xl border border-stone-300 bg-white text-stone-600 hover:border-stone-400 hover:bg-stone-50 transition-all shadow-sm">
                         <Download size={16} /> Export
                     </button>
-                    <button className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm" style={{ backgroundColor: '#111' }}>
+                    <button onClick={openAddModal} className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm" style={{ backgroundColor: '#111' }}>
                         <Plus size={16} strokeWidth={3} /> Create Invoice
                     </button>
                 </div>
@@ -177,8 +241,11 @@ export default function FeeInvoicesPage() {
                                                     <button className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-stone-600 transition-all flex-shrink-0" title="View">
                                                         <Eye size={13} strokeWidth={2.5} />
                                                     </button>
-                                                    <button className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-stone-600 transition-all flex-shrink-0" title="Edit">
+                                                    <button onClick={() => openEditModal(invoice)} className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-stone-600 transition-all flex-shrink-0" title="Edit">
                                                         <Edit2 size={13} strokeWidth={2.5} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(invoice._id)} className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-red-500 transition-all flex-shrink-0" title="Delete">
+                                                        <Trash2 size={13} strokeWidth={2.5} />
                                                     </button>
                                                 </div>
                                             </div>
@@ -289,6 +356,53 @@ export default function FeeInvoicesPage() {
                 </div>
 
             </div>
+
+            {/* Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={closeModal}>
+                    <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-stone-900">{editingItem ? 'Edit Invoice' : 'Generate Invoice'}</h2>
+                            <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-600 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Student Name</label>
+                                <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Amount</label>
+                                <input type="text" name="amount" value={formData.amount} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Due Date</label>
+                                <input type="text" name="dueDate" value={formData.dueDate} onChange={handleChange} required placeholder="e.g. 10 Feb 2026"
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Status</label>
+                                <select name="status" value={formData.status} onChange={handleChange}
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="Pending">Pending</option>
+                                    <option value="Paid">Paid</option>
+                                    <option value="Partial">Partial</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors">Cancel</button>
+                                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#FF9F43' }}>
+                                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                                    {editingItem ? 'Update' : 'Generate'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

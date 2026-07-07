@@ -144,11 +144,11 @@ router.post('/leave', protect, staffOnly, async (req, res) => {
 router.get('/leave-approvals', protect, staffOnly, async (req, res) => {
     try {
         // Find all student users
-        const studentUsers = await User.find({ role: 'student' }).select('_id');
+        const studentUsers = await User.find({ role: 'student', isDeleted: { $ne: true } }).select('_id');
         const studentIds = studentUsers.map(u => u._id);
 
         const leaves = await LeaveRequest.find({ student: { $in: studentIds } })
-            .populate('student', 'firstName lastName name role email rollNumber')
+            .populate('student', 'name role email schoolId')
             .sort({ createdAt: -1 });
             
         res.json(leaves);
@@ -208,6 +208,24 @@ router.post('/attendance/mark', protect, staffOnly, async (req, res) => {
         console.error(err);
         res.status(500).json({ message: 'Server Error' });
     }
+});
+
+// PUT /api/staff/profile - Update own profile
+router.put('/profile', protect, staffOnly, async (req, res) => {
+  try {
+    const { phone, address, gender, dateOfBirth } = req.body;
+    const updateData = {};
+    if (phone) updateData['profile.phone'] = phone;
+    if (address) updateData['profile.address'] = address;
+    if (gender) updateData['profile.gender'] = gender;
+    if (dateOfBirth) updateData['profile.dateOfBirth'] = dateOfBirth;
+
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true });
+    res.json({ success: true, data: user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
 });
 
 module.exports = router;

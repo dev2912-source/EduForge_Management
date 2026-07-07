@@ -18,9 +18,6 @@ import {
   LogOut,
   ChevronsLeft,
   Menu,
-  Bell,
-  Search,
-  Plus,
   Users,
   CircleDollarSign,
   Settings,
@@ -28,6 +25,9 @@ import {
   CalendarPlus,
   CheckCircle
 } from "lucide-react";
+import AddMenu from "@/components/layout/AddMenu";
+import NotificationPanel from "@/components/layout/NotificationPanel";
+import ProfileDropdown from "@/components/layout/ProfileDropdown";
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
@@ -36,6 +36,7 @@ export default function DashboardLayout({ children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userRole, setUserRole] = useState("student");
   const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [userInitials, setUserInitials] = useState("U");
 
   useEffect(() => {
@@ -45,12 +46,9 @@ export default function DashboardLayout({ children }) {
         const parsed = JSON.parse(userData);
         setUserRole(parsed.role || "student");
         
-        let name = "User";
-        if (parsed.role === 'admin') name = "Admin User";
-        if (parsed.role === 'staff') name = "Staff Member";
-        if (parsed.role === 'student') name = "Student Name";
-        
+        const name = parsed.name || "User";
         setUserName(name);
+        setUserEmail(parsed.email || "");
         setUserInitials(name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase());
       } catch (e) {
         console.error(e);
@@ -331,24 +329,9 @@ export default function DashboardLayout({ children }) {
           </div>
 
           <div className="flex items-center gap-4 sm:gap-6">
-            {userRole !== "student" && (
-              <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FF9F43] hover:bg-[#ff8f23] text-white text-sm font-bold rounded-md transition-colors shadow-sm">
-                <Plus size={16} strokeWidth={3} />
-                Add
-              </button>
-            )}
-            
-            <button className="text-stone-600 hover:text-stone-900 transition-colors">
-              <Bell size={20} strokeWidth={2} />
-            </button>
-            
-            <div className="flex items-center cursor-pointer">
-              <div className="p-0.5 border-2 border-stone-200 rounded-full">
-                <div className="w-8 h-8 bg-[#FF9F43] text-white text-xs font-black rounded-full flex items-center justify-center">
-                  {userInitials || "DE"}
-                </div>
-              </div>
-            </div>
+            <AddMenu userRole={userRole} />
+            <NotificationPanel />
+            <ProfileDropdown userInitials={userInitials} userName={userName} userEmail={userEmail} />
           </div>
         </header>
 

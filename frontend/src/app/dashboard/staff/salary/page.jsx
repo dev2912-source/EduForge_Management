@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, Square, ChevronLeft, ChevronRight, RefreshCw, Plus, Eye, Download, FileText, Send } from 'lucide-react';
+import { Search, Filter, ChevronDown, Square, ChevronLeft, ChevronRight, RefreshCw, Plus, Eye, Download, FileText, Send, Loader2, X, Trash2, Edit2 } from 'lucide-react';
 
 export default function SalarySlipsPage() {
     const [salarySlips, setSalarySlips] = useState([]);
@@ -17,6 +17,11 @@ export default function SalarySlipsPage() {
     // Pagination state
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
+    const [showModal, setShowModal] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [staffList, setStaffList] = useState([]);
+    const [formData, setFormData] = useState({ staff: '', month: 'April 2026', gross: '', deductions: 0, net: 0, status: 'Pending' });
 
     const fetchSalarySlips = async () => {
         setLoading(true);
@@ -41,6 +46,89 @@ export default function SalarySlipsPage() {
     useEffect(() => {
         fetchSalarySlips();
     }, [page, limit, search]);
+
+    const months = ['April 2026', 'May 2026', 'June 2026'];
+
+    const fetchStaff = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('http://localhost:5000/api/admin/staff?limit=100', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) setStaffList(data.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch staff", error);
+        }
+    };
+
+    const openAddModal = () => {
+        setEditingItem(null);
+        setFormData({ staff: '', month: 'April 2026', gross: '', deductions: 0, net: 0, status: 'Pending' });
+        fetchStaff();
+        setShowModal(true);
+    };
+
+    const openEditModal = (item) => {
+        setEditingItem(item);
+        setFormData({ staff: item.staff?._id || item.staff, month: item.month, gross: item.gross, deductions: item.deductions, net: item.net, status: item.status });
+        fetchStaff();
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingItem(null);
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        const newFormData = { ...formData, [name]: name === 'gross' || name === 'deductions' ? Number(value) : value };
+        if (name === 'gross' || name === 'deductions') {
+            newFormData.net = (Number(newFormData.gross) || 0) - (Number(newFormData.deductions) || 0);
+        }
+        setFormData(newFormData);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = editingItem 
+                ? `http://localhost:5000/api/admin/salary/${editingItem._id}`
+                : 'http://localhost:5000/api/admin/salary';
+            const method = editingItem ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(formData)
+            });
+            if (res.ok) {
+                closeModal();
+                fetchSalarySlips();
+            }
+        } catch (error) {
+            console.error('Failed to save salary slip', error);
+        }
+        setSubmitting(false);
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this salary slip?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:5000/api/admin/salary/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) fetchSalarySlips();
+        } catch (error) {
+            console.error('Failed to delete salary slip', error);
+        }
+    };
 
     const getStatusBadge = (status) => {
         const s = (status || 'Pending').toLowerCase();
@@ -107,7 +195,7 @@ export default function SalarySlipsPage() {
                         <RefreshCw size={14} strokeWidth={2.5} className={loading ? "animate-spin" : ""} /> Refresh
                     </button>
                     
-                    <button className="flex items-center justify-center gap-2 px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap shadow-sm hover:scale-105" style={{ backgroundColor: 'var(--orange)' }}>
+                    <button onClick={openAddModal} className="flex items-center justify-center gap-2 px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap shadow-sm hover:scale-105" style={{ backgroundColor: 'var(--orange)' }}>
                         <Plus size={16} strokeWidth={3} /> Generate
                     </button>
                 </div>
@@ -220,6 +308,12 @@ export default function SalarySlipsPage() {
                                         </td>
                                         <td className="py-4 px-4 align-middle text-right">
                                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => openEditModal(slip)} className="p-1.5 rounded-md text-stone-400 hover:text-orange-500 hover:bg-orange-50 transition-colors" title="Edit">
+                                                    <Edit2 size={16} strokeWidth={2.5} />
+                                                </button>
+                                                <button onClick={() => handleDelete(slip._id)} className="p-1.5 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
+                                                    <Trash2 size={16} strokeWidth={2.5} />
+                                                </button>
                                                 <button className="p-1.5 rounded-md text-stone-400 hover:text-orange-500 hover:bg-orange-50 transition-colors" title="View Slip">
                                                     <Eye size={16} strokeWidth={2.5} />
                                                 </button>
@@ -296,6 +390,72 @@ export default function SalarySlipsPage() {
                 </div>
 
             </div>
+
+            {/* Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={closeModal}>
+                    <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-stone-900">{editingItem ? 'Edit Salary Slip' : 'Generate Salary Slip'}</h2>
+                            <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-600 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Staff Member</label>
+                                <select name="staff" value={formData.staff} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="">Select Staff</option>
+                                    {staffList.map(s => (
+                                        <option key={s._id} value={s._id}>{s.firstName || s.name} {s.lastName || ''}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Month</label>
+                                <select name="month" value={formData.month} onChange={handleChange}
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    {months.map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Gross Amount</label>
+                                <input type="number" name="gross" value={formData.gross} onChange={handleChange} required min="0"
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Deductions</label>
+                                <input type="number" name="deductions" value={formData.deductions} onChange={handleChange} min="0"
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Net Amount</label>
+                                <input type="number" name="net" value={formData.net} readOnly
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm bg-stone-50 text-stone-700 focus:outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Status</label>
+                                <select name="status" value={formData.status} onChange={handleChange}
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="Paid">Paid</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Unpaid">Unpaid</option>
+                                </select>
+                            </div>
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors">Cancel</button>
+                                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#FF9F43' }}>
+                                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                                    {editingItem ? 'Update' : 'Generate'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

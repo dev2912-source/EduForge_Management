@@ -32,11 +32,19 @@ const UserSchema = new mongoose.Schema({
         bloodGroup: String,
         admissionDate: Date,
         address: String,
+        nationality: String,
+        religion: String,
+        photoUrl: String,
+        medium: String,
         parentDetails: {
             fatherName: String,
             fatherPhone: String,
             motherName: String,
-            motherPhone: String
+            motherPhone: String,
+            guardianName: String,
+            guardianPhone: String,
+            relation: String,
+            annualIncome: Number
         },
         // Student-specific fields
         className: String,
@@ -48,13 +56,13 @@ const UserSchema = new mongoose.Schema({
         },
         academicYear: String,
         rollNumber: String
-    }
+    },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null }
 }, { timestamps: true });
 
-UserSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) {
-        next();
-    }
+UserSchema.pre('save', async function() {
+    if (!this.isModified('password')) return;
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
 });

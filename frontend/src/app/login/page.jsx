@@ -32,7 +32,7 @@ export default function LoginPage() {
 
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify({ id: data.id, role: data.role }));
+        localStorage.setItem("user", JSON.stringify({ id: data._id, role: data.role, name: data.name, email: data.email, schoolId: data.schoolId }));
         
         // Redirect to dashboard layout which will handle role-based component rendering
         router.push("/dashboard");

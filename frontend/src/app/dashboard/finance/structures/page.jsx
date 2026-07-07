@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Upload, Edit2, ChevronDown, Square, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Plus, Upload, Edit2, ChevronDown, Square, ChevronLeft, ChevronRight, Loader2, X, Trash2 } from 'lucide-react';
 
 export default function FeeStructuresPage() {
     const [structures, setStructures] = useState([]);
@@ -12,6 +12,11 @@ export default function FeeStructuresPage() {
     // Pagination state
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
+    const [showModal, setShowModal] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [classesList, setClassesList] = useState([]);
+    const [formData, setFormData] = useState({ className: '', academicYear: '', category: '', amount: '', frequency: 'Monthly', dueDay: 1 });
 
     const fetchStructures = async () => {
         setLoading(true);
@@ -36,6 +41,83 @@ export default function FeeStructuresPage() {
     useEffect(() => {
         fetchStructures();
     }, [page, limit, search]);
+
+    const fetchClasses = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('http://localhost:5000/api/admin/classes?limit=1000', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) setClassesList(data.data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch classes", error);
+        }
+    };
+
+    const openAddModal = () => {
+        setEditingItem(null);
+        setFormData({ className: '', academicYear: '', category: '', amount: '', frequency: 'Monthly', dueDay: 1 });
+        fetchClasses();
+        setShowModal(true);
+    };
+
+    const openEditModal = (item) => {
+        setEditingItem(item);
+        setFormData({ className: item.className, academicYear: item.academicYear, category: item.category, amount: item.amount, frequency: item.frequency, dueDay: item.dueDay });
+        fetchClasses();
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingItem(null);
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: name === 'amount' || name === 'dueDay' ? Number(value) : value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = editingItem 
+                ? `http://localhost:5000/api/admin/fee-structures/${editingItem._id}`
+                : 'http://localhost:5000/api/admin/fee-structures';
+            const method = editingItem ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(formData)
+            });
+            if (res.ok) {
+                closeModal();
+                fetchStructures();
+            }
+        } catch (error) {
+            console.error('Failed to save fee structure', error);
+        }
+        setSubmitting(false);
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this fee structure?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:5000/api/admin/fee-structures/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) fetchStructures();
+        } catch (error) {
+            console.error('Failed to delete fee structure', error);
+        }
+    };
 
     const formatDateTime = (dateString) => {
         if (!dateString) return '—';
@@ -75,7 +157,7 @@ export default function FeeStructuresPage() {
                     <button className="flex items-center gap-1.5 py-2 px-4 text-sm font-semibold rounded-xl border border-stone-300 bg-white text-stone-600 hover:border-stone-400 hover:bg-stone-50 transition-all shadow-sm">
                         <Upload size={16} /> Import
                     </button>
-                    <button className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm" style={{ backgroundColor: '#111' }}>
+                    <button onClick={openAddModal} className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm" style={{ backgroundColor: '#111' }}>
                         <Plus size={16} strokeWidth={3} /> Add Structure
                     </button>
                 </div>
@@ -161,12 +243,15 @@ export default function FeeStructuresPage() {
                                 structures.map((struct) => (
                                     <tr key={struct._id} className="group transition-all duration-100 cursor-pointer hover:bg-stone-50/70">
                                         <td className="w-16 py-3 pl-5 pr-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0 border-stone-300 bg-white hover:border-orange"></div>
-                                                <button className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-stone-600 transition-all flex-shrink-0" title="Edit">
-                                                    <Edit2 size={13} strokeWidth={2.5} />
-                                                </button>
-                                            </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0 border-stone-300 bg-white hover:border-orange"></div>
+                                                    <button onClick={() => openEditModal(struct)} className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-stone-600 transition-all flex-shrink-0" title="Edit">
+                                                        <Edit2 size={13} strokeWidth={2.5} />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(struct._id)} className="flex items-center justify-center w-5 h-5 rounded text-stone-400 hover:text-red-500 transition-all flex-shrink-0" title="Delete">
+                                                        <Trash2 size={13} strokeWidth={2.5} />
+                                                    </button>
+                                                </div>
                                         </td>
                                         <td className="py-3 px-3">
                                             <span className="text-sm font-black text-stone-800 group-hover:text-stone-900">{struct.className}</span>
@@ -274,6 +359,70 @@ export default function FeeStructuresPage() {
                 </div>
 
             </div>
+
+            {/* Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={closeModal}>
+                    <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-stone-900">{editingItem ? 'Edit Fee Structure' : 'Add Fee Structure'}</h2>
+                            <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-600 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Class Name</label>
+                                <select name="className" value={formData.className} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="">Select Class</option>
+                                    {classesList.map(cls => (
+                                        <option key={cls._id} value={cls.name}>{cls.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Academic Year</label>
+                                <input type="text" name="academicYear" value={formData.academicYear} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Category</label>
+                                <input type="text" name="category" value={formData.category} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Amount</label>
+                                <input type="number" name="amount" value={formData.amount} onChange={handleChange} required min="0"
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Frequency</label>
+                                <select name="frequency" value={formData.frequency} onChange={handleChange}
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="Monthly">Monthly</option>
+                                    <option value="Quarterly">Quarterly</option>
+                                    <option value="Annually">Annually</option>
+                                    <option value="Bi-Annually">Bi-Annually</option>
+                                    <option value="One-Time">One-Time</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Due Day (1-31)</label>
+                                <input type="number" name="dueDay" value={formData.dueDay} onChange={handleChange} min="1" max="31" required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors">Cancel</button>
+                                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#FF9F43' }}>
+                                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                                    {editingItem ? 'Update' : 'Create'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

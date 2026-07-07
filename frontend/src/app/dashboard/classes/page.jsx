@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Edit2, Trash2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Plus, Edit2, Trash2, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
 
 export default function ClassesPage() {
     const [classes, setClasses] = useState([]);
@@ -12,6 +12,10 @@ export default function ClassesPage() {
     // Pagination state
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
+    const [showModal, setShowModal] = useState(false);
+    const [editingClass, setEditingClass] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [formData, setFormData] = useState({ name: '', medium: 'ENGLISH', sections: 1 });
 
     const fetchClasses = async () => {
         setLoading(true);
@@ -36,6 +40,66 @@ export default function ClassesPage() {
     useEffect(() => {
         fetchClasses();
     }, [search]);
+
+    const openAddModal = () => {
+        setEditingClass(null);
+        setFormData({ name: '', medium: 'ENGLISH', sections: 1 });
+        setShowModal(true);
+    };
+
+    const openEditModal = (cls) => {
+        setEditingClass(cls);
+        setFormData({ name: cls.name, medium: cls.medium, sections: cls.sections });
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingClass(null);
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: name === 'sections' ? Number(value) : value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const token = localStorage.getItem('token');
+            const url = editingClass 
+                ? `http://localhost:5000/api/admin/classes/${editingClass._id}`
+                : 'http://localhost:5000/api/admin/classes';
+            const method = editingClass ? 'PUT' : 'POST';
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(formData)
+            });
+            if (res.ok) {
+                closeModal();
+                fetchClasses();
+            }
+        } catch (error) {
+            console.error('Failed to save class', error);
+        }
+        setSubmitting(false);
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this class?')) return;
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`http://localhost:5000/api/admin/classes/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) fetchClasses();
+        } catch (error) {
+            console.error('Failed to delete class', error);
+        }
+    };
 
     const formatDate = (dateString) => {
         if (!dateString) return '—';
@@ -74,7 +138,7 @@ export default function ClassesPage() {
                     </p>
                 </div>
                 
-                <button className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm self-start sm:self-auto" style={{ backgroundColor: '#111' }}>
+                <button onClick={openAddModal} className="flex items-center gap-1.5 py-2 px-5 text-sm font-semibold rounded-xl text-white transition-all shadow-sm self-start sm:self-auto" style={{ backgroundColor: '#111' }}>
                     <Plus size={16} /> Add Class
                 </button>
             </div>
@@ -164,10 +228,10 @@ export default function ClassesPage() {
                                         </td>
                                         <td className="py-3 pr-5 pl-3 text-right">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button className="p-1.5 text-stone-400 hover:text-orange-500 transition-colors" title="Edit">
+                                                <button onClick={() => openEditModal(cls)} className="p-1.5 text-stone-400 hover:text-orange-500 transition-colors" title="Edit">
                                                     <Edit2 size={15} />
                                                 </button>
-                                                <button className="p-1.5 text-stone-400 hover:text-red-500 transition-colors" title="Delete">
+                                                <button onClick={() => handleDelete(cls._id)} className="p-1.5 text-stone-400 hover:text-red-500 transition-colors" title="Delete">
                                                     <Trash2 size={15} />
                                                 </button>
                                             </div>
@@ -241,6 +305,49 @@ export default function ClassesPage() {
                 </div>
 
             </div>
+
+            {/* Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={closeModal}>
+                    <div className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-bold text-stone-900">{editingClass ? 'Edit Class' : 'Add Class'}</h2>
+                            <button onClick={closeModal} className="p-1 text-stone-400 hover:text-stone-600 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Name</label>
+                                <input type="text" name="name" value={formData.name} onChange={handleChange} required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Medium</label>
+                                <select name="medium" value={formData.medium} onChange={handleChange}
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500">
+                                    <option value="ENGLISH">English</option>
+                                    <option value="HINDI">Hindi</option>
+                                    <option value="MARATHI">Marathi</option>
+                                    <option value="GUJARATI">Gujarati</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-semibold text-stone-700 mb-1">Sections (1-4)</label>
+                                <input type="number" name="sections" value={formData.sections} onChange={handleChange} min="1" max="4" required
+                                    className="w-full rounded-lg border border-stone-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500" />
+                            </div>
+                            <div className="flex items-center justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeModal} className="px-4 py-2 rounded-lg text-sm font-semibold bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors">Cancel</button>
+                                <button type="submit" disabled={submitting} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style={{ backgroundColor: '#FF9F43' }}>
+                                    {submitting && <Loader2 size={14} className="animate-spin" />}
+                                    {editingClass ? 'Update' : 'Create'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

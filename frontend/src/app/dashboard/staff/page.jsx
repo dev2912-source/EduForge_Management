@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, Square, ChevronLeft, ChevronRight, RefreshCw, Plus, Eye, Edit, Trash2 } from 'lucide-react';
+import { Search, Filter, ChevronDown, Square, ChevronLeft, ChevronRight, RefreshCw, Plus, Edit, Trash2, X, Loader2 } from 'lucide-react';
+
+const INITIAL_FORM = {
+  name: "",
+  email: "",
+  phone: "",
+  gender: "",
+  address: "",
+};
+
+const genders = ["Male", "Female", "Other"];
 
 export default function StaffPage() {
     const [staffList, setStaffList] = useState([]);
@@ -9,15 +19,23 @@ export default function StaffPage() {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     
-    // Pagination state
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
+
+    const [showModal, setShowModal] = useState(false);
+    const [formData, setFormData] = useState(INITIAL_FORM);
+    const [editingId, setEditingId] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState("");
+
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleting, setDeleting] = useState(false);
 
     const fetchStaff = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`http://localhost:5000/api/admin/staff?page=${page}&limit=${limit}&search=${search}`, {
+            const res = await fetch(`/api/admin/staff?page=${page}&limit=${limit}&search=${search}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
@@ -59,21 +77,110 @@ export default function StaffPage() {
         if (!staff) return 'STF-0000';
         if (staff.rollNumber) return staff.rollNumber;
         if (staff.schoolId) return staff.schoolId;
-        return 'STF-2026-0001'; // Mock fallback
+        return 'STF-2026-0001';
     };
 
     const getDepartment = (staff) => {
-        if (!staff) return '—';
+        if (!staff) return '\u2014';
         return 'Administration';
     };
 
     const getDesignation = (staff) => {
-        if (!staff) return '—';
+        if (!staff) return '\u2014';
         return 'Administrative Staff';
     };
     
     const getTypeBadge = (staff) => {
         return <span className="px-2 py-1 rounded text-[10px] font-bold tracking-wide bg-stone-100 text-stone-600 border border-stone-200">FULL-TIME</span>;
+    };
+
+    const openAddModal = () => {
+        setEditingId(null);
+        setFormData(INITIAL_FORM);
+        setFormError("");
+        setShowModal(true);
+    };
+
+    const openEditModal = (staff) => {
+        setEditingId(staff._id);
+        setFormData({
+            name: staff.name || `${staff.firstName || ''} ${staff.lastName || ''}`.trim(),
+            email: staff.email || "",
+            phone: staff.phone || "",
+            gender: staff.profile?.gender || "",
+            address: staff.profile?.address || "",
+        });
+        setFormError("");
+        setShowModal(true);
+    };
+
+    const handleFormChange = (e) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!formData.name.trim()) {
+            setFormError("Full Name is required");
+            return;
+        }
+        setSaving(true);
+        setFormError("");
+        try {
+            const token = localStorage.getItem("token") || "";
+            const payload = {
+                name: formData.name,
+                email: formData.email,
+                phone: formData.phone,
+                profile: {
+                    gender: formData.gender,
+                    address: formData.address,
+                },
+            };
+
+            const url = editingId ? `/api/admin/staff/${editingId}` : "/api/admin/staff";
+            const method = editingId ? "PUT" : "POST";
+
+            const res = await fetch(url, {
+                method,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || "Failed to save staff member");
+            }
+
+            setShowModal(false);
+            fetchStaff();
+        } catch (err) {
+            setFormError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setDeleting(true);
+        try {
+            const token = localStorage.getItem("token") || "";
+            const res = await fetch(`/api/admin/staff/${deleteTarget._id}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error("Failed to delete staff member");
+            setDeleteTarget(null);
+            fetchStaff();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const totalPages = Math.ceil(total / limit) || 1;
@@ -96,7 +203,10 @@ export default function StaffPage() {
                     >
                         <RefreshCw size={14} strokeWidth={2.5} className={loading ? "animate-spin" : ""} /> Refresh
                     </button>
-                    <button className="flex items-center justify-center gap-2 px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap shadow-sm hover:scale-105" style={{ backgroundColor: 'var(--orange)' }}>
+                    <button
+                        onClick={openAddModal}
+                        className="flex items-center justify-center gap-2 px-4 py-2 text-white text-sm font-bold rounded-lg transition-colors whitespace-nowrap shadow-sm hover:scale-105" style={{ backgroundColor: 'var(--orange)' }}
+                    >
                         <Plus size={16} strokeWidth={3} /> Add
                     </button>
                 </div>
@@ -139,32 +249,32 @@ export default function StaffPage() {
                                 </th>
                                 <th className="py-4 px-3 w-64">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        Staff Name <span className="text-orange-400 text-[10px]">▼</span>
+                                        Staff Name <span className="text-orange-400 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        ID <span className="text-stone-300 text-[10px]">▼</span>
+                                        ID <span className="text-stone-300 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        Department <span className="text-stone-300 text-[10px]">▼</span>
+                                        Department <span className="text-stone-300 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        Designation <span className="text-stone-300 text-[10px]">▼</span>
+                                        Designation <span className="text-stone-300 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        Type <span className="text-stone-300 text-[10px]">▼</span>
+                                        Type <span className="text-stone-300 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3">
                                     <button className="flex items-center gap-1.5 group text-sm font-bold text-stone-700 hover:text-stone-900 transition-colors">
-                                        Status <span className="text-stone-300 text-[10px]">▼</span>
+                                        Status <span className="text-stone-300 text-[10px]">&#9660;</span>
                                     </button>
                                 </th>
                                 <th className="py-4 px-3 text-right">
@@ -206,13 +316,18 @@ export default function StaffPage() {
                                         </td>
                                         <td className="py-4 px-4 align-middle text-right">
                                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button className="p-1.5 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors">
-                                                    <Eye size={16} strokeWidth={2.5} />
-                                                </button>
-                                                <button className="p-1.5 rounded-md text-stone-400 hover:text-orange-500 hover:bg-orange-50 transition-colors">
+                                                <button
+                                                    onClick={() => openEditModal(staff)}
+                                                    className="p-1.5 rounded-md text-stone-400 hover:text-orange-500 hover:bg-orange-50 transition-colors"
+                                                    title="Edit"
+                                                >
                                                     <Edit size={16} strokeWidth={2.5} />
                                                 </button>
-                                                <button className="p-1.5 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                                <button
+                                                    onClick={() => setDeleteTarget(staff)}
+                                                    className="p-1.5 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                    title="Delete"
+                                                >
                                                     <Trash2 size={16} strokeWidth={2.5} />
                                                 </button>
                                             </div>
@@ -282,6 +397,84 @@ export default function StaffPage() {
                 </div>
 
             </div>
+
+            {/* Add/Edit Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-xl border border-stone-200 w-full max-w-lg max-h-[90vh] overflow-y-auto m-4">
+                        <div className="flex items-center justify-between p-5 border-b border-stone-200">
+                            <h2 className="text-lg font-black text-stone-900">
+                                {editingId ? "Edit Staff" : "Add Staff"}
+                            </h2>
+                            <button onClick={() => setShowModal(false)} className="p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                            {formError && (
+                                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-bold">
+                                    {formError}
+                                </div>
+                            )}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[12px] font-black text-stone-700 mb-1">Full Name <span className="text-red-500">*</span></label>
+                                    <input type="text" name="name" value={formData.name} onChange={handleFormChange} className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm" placeholder="Enter full name" />
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-black text-stone-700 mb-1">Email</label>
+                                    <input type="email" name="email" value={formData.email} onChange={handleFormChange} className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm" placeholder="email@example.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-black text-stone-700 mb-1">Phone</label>
+                                    <input type="text" name="phone" value={formData.phone} onChange={handleFormChange} className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm" placeholder="Phone number" />
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-black text-stone-700 mb-1">Gender</label>
+                                    <select name="gender" value={formData.gender} onChange={handleFormChange} className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm">
+                                        <option value="">Select Gender</option>
+                                        {genders.map(g => <option key={g} value={g}>{g}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[12px] font-black text-stone-700 mb-1">Address</label>
+                                    <textarea name="address" value={formData.address} onChange={handleFormChange} rows={2} className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm" />
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-3 pt-2 border-t border-stone-100">
+                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-bold text-stone-700 hover:bg-stone-50 transition-colors shadow-sm">
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={saving} className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50">
+                                    {saving && <Loader2 size={14} className="animate-spin" />}
+                                    {editingId ? "Update Staff" : "Add Staff"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-xl border border-stone-200 w-full max-w-md m-4 p-5">
+                        <h3 className="text-lg font-black text-stone-900 mb-2">Delete Staff Member</h3>
+                        <p className="text-sm font-medium text-stone-600 mb-5">
+                            Are you sure you want to delete <span className="font-black text-stone-800">{getStaffName(deleteTarget)}</span>? This action cannot be undone.
+                        </p>
+                        <div className="flex items-center justify-end gap-3">
+                            <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-bold text-stone-700 hover:bg-stone-50 transition-colors shadow-sm">
+                                Cancel
+                            </button>
+                            <button onClick={confirmDelete} disabled={deleting} className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[13px] font-bold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50">
+                                {deleting && <Loader2 size={14} className="animate-spin" />}
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

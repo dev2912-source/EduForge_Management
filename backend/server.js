@@ -9,6 +9,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -17,6 +18,7 @@ app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/student', require('./routes/studentRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/staff', require('./routes/staffRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 const PORT = process.env.BACKEND_PORT || 5000;
 

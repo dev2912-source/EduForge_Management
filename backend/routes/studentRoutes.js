@@ -156,4 +156,23 @@ router.post('/leave', protect, async (req, res) => {
     }
 });
 
+// PUT /api/student/profile/update - Update own profile
+router.put('/profile/update', protect, async (req, res) => {
+  try {
+    const { phone, address, gender, dateOfBirth, parentDetails } = req.body;
+    const updateData = {};
+    if (phone) updateData['profile.phone'] = phone;
+    if (address) updateData['profile.address'] = address;
+    if (gender) updateData['profile.gender'] = gender;
+    if (dateOfBirth) updateData['profile.dateOfBirth'] = dateOfBirth;
+    if (parentDetails) updateData['profile.parentDetails'] = parentDetails;
+
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true });
+    res.json({ success: true, data: user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 module.exports = router;
