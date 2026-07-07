@@ -24,7 +24,9 @@ import {
   Users,
   CircleDollarSign,
   Settings,
-  Trash2
+  Trash2,
+  CalendarPlus,
+  CheckCircle
 } from "lucide-react";
 
 export default function DashboardLayout({ children }) {
@@ -148,13 +150,24 @@ export default function DashboardLayout({ children }) {
       {
         section: "ACADEMIC",
         items: [
-          { name: "Timetable", href: "/dashboard/timetable", icon: Calendar },
-          { name: "Attendance", href: "/dashboard/attendance", icon: BarChart2 },
+          { name: "Students", href: "/dashboard/students", icon: Users },
+          { name: "My Timetable", href: "/dashboard/timetable", icon: Calendar },
+          { name: "Mark Attendance", href: "/dashboard/attendance", icon: CalendarPlus },
+          { name: "Leave Approvals", href: "/dashboard/leave-approvals", icon: CheckCircle },
+        ]
+      },
+      {
+        section: "FEES",
+        items: [
+          { name: "Invoices", href: "/dashboard/invoices", icon: FileText },
+          { name: "Payments", href: "/dashboard/payments", icon: CreditCard },
         ]
       },
       {
         items: [
+          { name: "Clock In / Out", href: "/dashboard/clock", icon: Clock },
           { name: "Leave Requests", href: "/dashboard/leave", icon: CalendarDays },
+          { name: "Salary Slips", href: "/dashboard/salary", icon: FileText },
           { name: "Settings", href: "/dashboard/settings", icon: Settings },
         ]
       }
@@ -278,7 +291,7 @@ export default function DashboardLayout({ children }) {
           })}
 
           <button 
-            className={`flex items-center ${sidebarOpen ? 'justify-start gap-2.5' : 'justify-center'} px-2.5 py-2 mt-1 text-[#EF4444] hover:bg-red-50 font-bold transition-all w-full rounded-lg`}
+            className={`flex items-center ${sidebarOpen ? 'justify-center gap-2.5' : 'justify-center'} px-2.5 py-2 mt-1 text-[#EF4444] hover:bg-red-50 font-bold transition-all w-full rounded-lg`}
             onClick={() => {
               localStorage.removeItem("token");
               localStorage.removeItem("user");
@@ -286,9 +299,15 @@ export default function DashboardLayout({ children }) {
             }}
             title={!sidebarOpen ? "Sign Out" : ""}
           >
-            <LogOut size={18} className="flex-shrink-0" strokeWidth={2} />
+            <LogOut size={18} className="flex-shrink-0" strokeWidth={2.5} />
             {sidebarOpen && <span className="text-sm">Sign Out</span>}
           </button>
+          
+          {sidebarOpen && (
+            <div className="text-center mt-3 mb-1">
+              <span className="text-[11px] font-black text-stone-400 tracking-wider">V0.0.1</span>
+            </div>
+          )}
         </div>
       </aside>
 

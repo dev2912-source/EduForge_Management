@@ -11,12 +11,15 @@ export default function LeaveRequestsPage() {
   const fetchLeaves = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/student/leave`, {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const endpoint = user.role === 'staff' ? '/api/staff/leave' : '/api/student/leave';
+      
+      const res = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setLeaves(data);
+        setLeaves(Array.isArray(data) ? data : (data.data || []));
       }
     } catch (error) {
       console.error('Error fetching leaves:', error);
@@ -37,7 +40,10 @@ export default function LeaveRequestsPage() {
     
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/student/leave`, {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const endpoint = user.role === 'staff' ? '/api/staff/leave' : '/api/student/leave';
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

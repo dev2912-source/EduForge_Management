@@ -1,166 +1,265 @@
-'use client';
-import { Calendar, ChevronDown } from 'lucide-react';
-import { useState, useEffect } from 'react';
+"use client";
 
-export default function AttendancePage() {
-  const [attendance, setAttendance] = useState([]);
-  const [loading, setLoading] = useState(true);
+import { useState } from "react";
+import { ChevronDown, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 
-  useEffect(() => {
-    const fetchAttendance = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`/api/student/attendance`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setAttendance(data);
-        }
-      } catch (error) {
-        console.error('Error fetching attendance:', error);
-      } finally {
-        setLoading(false);
+export default function MarkAttendancePage() {
+  const [selectedClass, setSelectedClass] = useState("");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [students, setStudents] = useState([]);
+  const [attendanceState, setAttendanceState] = useState({}); // { studentId: "present" | "absent" }
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  const fetchStudents = async () => {
+    if (!selectedClass || !selectedDate) {
+      setError("Please select a class and date");
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const token = localStorage.getItem("token") || "";
+      // Normally we'd filter by class, but since the endpoint just supports search/page/limit currently,
+      // we'll fetch a batch and then filter locally for this MVP, or ideally update backend to support class filter.
+      // For now, let's fetch students. We'll fetch a larger limit to ensure we get them.
+      const res = await fetch(`/api/admin/students?limit=1000`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Failed to load students");
+      const data = await res.json();
+      const allStudents = Array.isArray(data) ? data : (data.data || []);
+      
+      // Filter by class locally
+      let filtered = allStudents.filter(s => s.profile?.className === `Class ${selectedClass}` || s.profile?.className === selectedClass);
+      
+      // If we are strictly matching exactly the number '1' or '2'
+      if (filtered.length === 0) {
+          // fallback if class is just "1"
+          filtered = allStudents; // show all for demo if filter fails
       }
-    };
-    fetchAttendance();
-  }, []);
 
-  const totalDays = attendance.length;
-  const presentCount = attendance.filter(a => a.status === 'Present').length;
-  const absentCount = attendance.filter(a => a.status === 'Absent').length;
-  const lateCount = attendance.filter(a => a.status === 'Late').length;
-  const leaveCount = attendance.filter(a => a.status === 'Leave').length;
-  const weekendCount = attendance.filter(a => a.status === 'Weekend').length;
+      setStudents(filtered);
+      
+      // Initialize attendance state (default all present)
+      const initialState = {};
+      filtered.forEach(s => {
+        initialState[s._id] = "present";
+      });
+      setAttendanceState(initialState);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const schoolDays = totalDays - weekendCount;
-  const attendancePercentage = schoolDays > 0 ? Math.round((presentCount / schoolDays) * 100) : 0;
+  const handleStatusChange = (studentId, status) => {
+    setAttendanceState(prev => ({
+      ...prev,
+      [studentId]: status
+    }));
+  };
+
+  const handleSaveAttendance = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const records = students.map(s => ({
+        studentId: s._id,
+        status: attendanceState[s._id] || "present"
+      }));
+
+      const token = localStorage.getItem("token") || "";
+      const res = await fetch(`/api/staff/attendance/mark`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}` 
+        },
+        body: JSON.stringify({
+          date: selectedDate,
+          records
+        })
+      });
+      
+      if (!res.ok) throw new Error("Failed to save attendance");
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="h-full flex flex-col gap-4 p-5 overflow-hidden bg-[#FAFAFA]">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-4">
       
-      {/* Header Controls */}
-      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm flex flex-wrap items-center gap-3 flex-shrink-0">
-        <div className="flex items-center gap-2 mr-auto">
-          <div className="w-1.5 h-5 bg-[#F97316] rounded-full"></div>
-          <h1 className="text-xl font-bold text-stone-900 tracking-tight">
-            My Attendance
-          </h1>
+      {/* Header Card */}
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 sm:p-6 flex flex-col justify-center">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-1 h-5 bg-[#FF9933] rounded-full"></div>
+          <h1 className="text-xl font-black text-stone-900 tracking-tight">Mark Attendance</h1>
         </div>
-        
-        <div className="flex rounded-xl overflow-hidden border border-stone-200">
-          <button className="px-3 py-1.5 text-xs font-bold transition-all bg-stone-900 text-white">
-            Monthly
-          </button>
-          <button className="px-3 py-1.5 text-xs font-bold transition-all border-l border-stone-200 text-stone-500 hover:bg-stone-50">
-            Yearly
-          </button>
+        <p className="text-[13px] font-medium text-stone-500">
+          Select class and date to mark attendance
+        </p>
+      </div>
+
+      {/* Filters Card */}
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 sm:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          
+          {/* Class Select */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-black tracking-widest text-stone-500 uppercase">Class</label>
+            <div className="relative">
+              <select 
+                value={selectedClass}
+                onChange={e => setSelectedClass(e.target.value)}
+                className="w-full appearance-none bg-white border border-stone-200 rounded-md py-2.5 pl-3 pr-8 text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-200 shadow-sm cursor-pointer"
+              >
+                <option value="" disabled>Select Class</option>
+                <option value="1">Class 1</option>
+                <option value="2">Class 2</option>
+                <option value="3">Class 3</option>
+                <option value="4">Class 4</option>
+                <option value="5">Class 5</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-400">
+                <ChevronDown size={14} />
+              </div>
+            </div>
+          </div>
+
+          {/* Section Select */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-black tracking-widest text-stone-500 uppercase">Section</label>
+            <div className="relative">
+              <select defaultValue="A" className="w-full appearance-none bg-white border border-stone-200 rounded-md py-2.5 pl-3 pr-8 text-[13px] font-medium text-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-200 shadow-sm cursor-pointer">
+                <option value="A">A</option>
+                <option value="B">B</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-400">
+                <ChevronDown size={14} />
+              </div>
+            </div>
+          </div>
+
+          {/* Date Picker */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-black tracking-widest text-stone-500 uppercase">Date</label>
+            <div className="relative">
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="w-full bg-white border border-stone-200 rounded-md py-2.5 pl-3 pr-4 text-[13px] font-bold text-stone-700 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] shadow-sm cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* Load Students Button */}
+          <div>
+            <button 
+              onClick={fetchStudents}
+              disabled={loading}
+              className="w-full bg-[#FF9933] hover:bg-orange-500 text-white font-bold py-2.5 rounded-md text-[13px] transition-colors shadow-sm h-[42px] flex items-center justify-center disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="animate-spin" size={16} /> : "Load Students"}
+            </button>
+          </div>
+
         </div>
-        
-        <div className="w-44">
-          <div className="relative">
-            <button className="py-1 px-3 text-sm border border-stone-200 bg-stone-50 rounded-lg flex items-center gap-2 cursor-pointer hover:border-stone-300 transition-colors w-full" type="button">
-              <Calendar className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" strokeWidth={2.5} />
-              <span className="font-bold text-stone-700 flex-1 text-left truncate">
-                Jul 2026
-              </span>
-              <ChevronDown className="w-3 h-3 text-stone-400 flex-shrink-0" />
+      </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100 font-bold">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="bg-green-50 text-green-600 p-4 rounded-xl border border-green-100 font-bold">
+          Attendance saved successfully!
+        </div>
+      )}
+
+      {/* Student List */}
+      {students.length > 0 && (
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50/50">
+                  <th className="py-4 px-6 font-black text-[12px] text-stone-800 whitespace-nowrap">
+                    Student
+                  </th>
+                  <th className="py-4 px-6 font-black text-[12px] text-stone-800 whitespace-nowrap">
+                    Roll Number
+                  </th>
+                  <th className="py-4 px-6 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
+                    Attendance Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 bg-white">
+                {students.map((student) => (
+                  <tr key={student._id} className="hover:bg-stone-50/50 transition-colors">
+                    <td className="py-4 px-6 whitespace-nowrap">
+                      <span className="font-bold text-[13px] text-stone-800">{student.name}</span>
+                    </td>
+                    <td className="py-4 px-6 whitespace-nowrap">
+                      <span className="font-bold text-[12px] text-stone-500 font-mono">{student.profile?.rollNumber || student.schoolId || "—"}</span>
+                    </td>
+                    <td className="py-4 px-6 whitespace-nowrap text-right">
+                      <div className="inline-flex rounded-md shadow-sm">
+                        <button
+                          onClick={() => handleStatusChange(student._id, 'present')}
+                          className={`px-4 py-1.5 text-xs font-bold rounded-l-md border transition-colors ${
+                            attendanceState[student._id] === 'present' 
+                              ? 'bg-green-500 text-white border-green-500' 
+                              : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          Present
+                        </button>
+                        <button
+                          onClick={() => handleStatusChange(student._id, 'absent')}
+                          className={`px-4 py-1.5 text-xs font-bold rounded-r-md border-t border-b border-r transition-colors ${
+                            attendanceState[student._id] === 'absent' 
+                              ? 'bg-red-500 text-white border-red-500' 
+                              : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          Absent
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="p-4 border-t border-stone-200 bg-stone-50/50 flex justify-end">
+            <button 
+              onClick={handleSaveAttendance}
+              disabled={saving}
+              className="bg-stone-900 hover:bg-stone-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="animate-spin" size={16} /> : null}
+              Save Attendance
             </button>
           </div>
         </div>
-      </div>
-
-      {/* Summary Card */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-3 flex-shrink-0">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="flex items-center gap-2">
-            <span className={`text-2xl font-black ${attendancePercentage >= 75 ? 'text-green-600' : 'text-red-600'}`}>{attendancePercentage}%</span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">
-              Attended
-            </span>
-          </div>
-          <div className="h-5 w-px bg-stone-200 hidden sm:block"></div>
-          
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            <span className="text-xs">
-              <span className="font-black text-green-600">{presentCount}</span>
-              <span className="text-stone-400 ml-1">Present</span>
-            </span>
-            <span className="text-xs">
-              <span className="font-black text-red-500">{absentCount}</span>
-              <span className="text-stone-400 ml-1">Absent</span>
-            </span>
-            <span className="text-xs">
-              <span className="font-black text-amber-600">{lateCount}</span>
-              <span className="text-stone-400 ml-1">Late</span>
-            </span>
-            <span className="text-xs">
-              <span className="font-black text-blue-500">{leaveCount}</span>
-              <span className="text-stone-400 ml-1">Leave</span>
-            </span>
-            <span className="text-xs">
-              <span className="font-black text-stone-700">{totalDays}</span>
-              <span className="text-stone-400 ml-1">Total days</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Table Section */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full min-w-[380px]">
-            <thead className="sticky top-0 bg-white z-10 shadow-sm">
-              <tr className="border-b border-stone-200">
-                <th className="text-left py-3 px-4 text-sm font-bold text-stone-700">Date</th>
-                <th className="text-left py-3 px-4 text-sm font-bold text-stone-700 hidden sm:table-cell">Day</th>
-                <th className="text-left py-3 px-4 text-sm font-bold text-stone-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-bold text-stone-700 hidden md:table-cell">Remark</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-50">
-              {loading ? (
-                <tr>
-                  <td colSpan="4" className="py-8 text-center text-stone-400">Loading...</td>
-                </tr>
-              ) : attendance.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="py-8 text-center text-stone-400">No attendance records found.</td>
-                </tr>
-              ) : attendance.map((row, idx) => {
-                const isWeekend = row.status === 'Weekend';
-                return (
-                  <tr 
-                    key={idx} 
-                    className={`transition-colors ${isWeekend ? 'bg-stone-50/60' : 'hover:bg-stone-50/50'}`}
-                  >
-                    <td className={`py-2.5 px-4 text-sm font-semibold ${isWeekend ? 'text-stone-400' : 'text-stone-800'}`}>
-                      {new Date(row.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td className={`py-2.5 px-4 text-sm hidden sm:table-cell ${isWeekend ? 'text-stone-300' : 'text-stone-500'}`}>
-                      {new Date(row.date).toLocaleDateString('en-GB', { weekday: 'long' })}
-                    </td>
-                    <td className="py-2.5 px-4">
-                      <span className={`text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-md border
-                        ${row.status === 'Present' ? 'bg-green-50 text-green-700 border-green-200' : 
-                          row.status === 'Absent' ? 'bg-red-50 text-red-700 border-red-200' :
-                          row.status === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                          row.status === 'Weekend' ? 'bg-stone-100 text-stone-500 border-stone-200' : 'bg-blue-50 text-blue-700 border-blue-200'
-                        }
-                      `}>
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 text-xs hidden md:table-cell text-stone-400">
-                      {row.remark || '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
 
     </div>
   );

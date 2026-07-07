@@ -16,6 +16,7 @@ app.use('/api/contact', require('./routes/contactRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/student', require('./routes/studentRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/staff', require('./routes/staffRoutes'));
 
 const PORT = process.env.BACKEND_PORT || 5000;
 

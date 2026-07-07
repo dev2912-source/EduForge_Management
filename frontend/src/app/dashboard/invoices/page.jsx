@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Filter, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Download, Upload, Plus, Loader2 } from "lucide-react";
+import { Search, Filter, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Info, Download, Loader2 } from "lucide-react";
 
-export default function PaymentsPage() {
-  const [payments, setPayments] = useState([]);
+export default function InvoicesPage() {
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -16,7 +16,7 @@ export default function PaymentsPage() {
   const limit = 10;
 
   useEffect(() => {
-    const fetchPayments = async () => {
+    const fetchInvoices = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token") || "";
@@ -26,17 +26,17 @@ export default function PaymentsPage() {
           ...(search && { search })
         });
         
-        const response = await fetch(`/api/admin/payments?${queryParams}`, {
+        const response = await fetch(`/api/admin/invoices?${queryParams}`, {
           headers: {
             "Authorization": `Bearer ${token}`
           }
         });
         
-        if (!response.ok) throw new Error("Failed to fetch payments");
+        if (!response.ok) throw new Error("Failed to fetch invoices");
         const data = await response.json();
         
         const resolvedData = Array.isArray(data) ? data : (data.data || []);
-        setPayments(resolvedData);
+        setInvoices(resolvedData);
         setTotalPages(data.pages || 1);
         setTotalRecords(data.total || resolvedData.length);
       } catch (err) {
@@ -48,7 +48,7 @@ export default function PaymentsPage() {
 
     // Debounce search slightly
     const timer = setTimeout(() => {
-      fetchPayments();
+      fetchInvoices();
     }, 300);
 
     return () => clearTimeout(timer);
@@ -57,18 +57,7 @@ export default function PaymentsPage() {
   const formatDate = (dateStr) => {
     if (!dateStr) return "—";
     const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  };
-
-  const getMethodColor = (method) => {
-    if (!method) return 'bg-stone-50 text-stone-600 border-stone-200/50';
-    switch(method.toLowerCase()) {
-      case 'cash': return 'bg-green-50 text-green-600 border-green-200/50';
-      case 'bank transfer': return 'bg-blue-50 text-blue-600 border-blue-200/50';
-      case 'online': return 'bg-purple-50 text-purple-600 border-purple-200/50';
-      case 'cheque': return 'bg-amber-50 text-amber-600 border-amber-200/50';
-      default: return 'bg-stone-50 text-stone-600 border-stone-200/50';
-    }
+    return date.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
   };
 
   const handleSearchChange = (e) => {
@@ -80,23 +69,50 @@ export default function PaymentsPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto space-y-4">
       
       {/* Header */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 sm:p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-1 h-5 bg-[#FF9933] rounded-full"></div>
-            <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">Fee Payments</h1>
-          </div>
-          <p className="text-[13px] font-medium text-stone-500">
-            <span className="text-[#FF9933] font-black">{totalRecords}</span> payments recorded
-          </p>
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-1 h-5 bg-[#FF9933] rounded-full"></div>
+          <h1 className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight">Fee Invoices</h1>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
-            <Upload size={16} strokeWidth={2.5} /> Import
-          </button>
-          <button className="bg-stone-900 hover:bg-stone-800 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
-            <Plus size={16} strokeWidth={3} /> Record Payment
-          </button>
+        <p className="text-[13px] font-medium text-stone-500">
+          <span className="text-[#FF9933] font-black">{totalRecords}</span> invoices total
+        </p>
+      </div>
+
+      {/* Info & Stats Card */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-blue-50/50 border border-blue-100 rounded-xl p-5 flex gap-4">
+          <div className="text-blue-500 flex-shrink-0 mt-0.5">
+            <Info size={20} strokeWidth={2.5} />
+          </div>
+          <div className="text-[13px] font-medium text-stone-600 leading-relaxed">
+            <p className="mb-2">
+              <strong className="text-stone-800">Invoices are automatically generated</strong> on the 1st of each month for all active students based on the fee structures defined for their class and academic year.
+            </p>
+            <p>
+              Changes to fee structures — including updates to amounts or newly added structures — will only apply to invoices generated in the <strong>next cycle</strong>. Already-generated invoices are not affected retroactively.
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-5 grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-stone-400 mb-1">Total Invoices</p>
+            <p className="text-xl font-black text-stone-900">{totalRecords}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-stone-400 mb-1">Pending</p>
+            {/* Real calculation could be done here if backend sends aggregates, keeping static placeholder as requested */}
+            <p className="text-xl font-black text-amber-600">-</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-stone-400 mb-1">Collected</p>
+            <p className="text-xl font-black text-green-600">-</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-widest text-stone-400 mb-1">Outstanding</p>
+            <p className="text-xl font-black text-red-600">-</p>
+          </div>
         </div>
       </div>
 
@@ -111,7 +127,7 @@ export default function PaymentsPage() {
             </div>
             <input 
               type="text" 
-              placeholder="Search payments..." 
+              placeholder="Search invoices..." 
               value={search}
               onChange={handleSearchChange}
               className="w-full pl-9 pr-4 py-2 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm"
@@ -129,12 +145,12 @@ export default function PaymentsPage() {
               <Loader2 className="animate-spin" size={48} />
             </div>
           ) : error ? (
-            <div className="flex items-center justify-center h-64 text-red-500 font-bold">
-              {error}
-            </div>
-          ) : payments.length === 0 ? (
+             <div className="flex items-center justify-center h-64 text-red-500 font-bold">
+               {error}
+             </div>
+          ) : invoices.length === 0 ? (
              <div className="flex flex-col items-center justify-center h-64 text-stone-500">
-               <p className="font-bold">No payments found.</p>
+               <p className="font-bold">No invoices found.</p>
                <p className="text-sm">Try adjusting your search filters.</p>
              </div>
           ) : (
@@ -145,78 +161,73 @@ export default function PaymentsPage() {
                     <input type="checkbox" className="w-3.5 h-3.5 rounded border-stone-300 text-[#FF9933] focus:ring-[#FF9933]" />
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Receipt # <ChevronDown size={12} className="inline text-stone-400" />
+                    Invoice # <ChevronDown size={12} className="inline text-stone-400" />
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Student Name <ChevronDown size={12} className="inline text-stone-400" />
-                  </th>
-                  <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Enrollment ID
+                    Student <ChevronDown size={12} className="inline text-stone-400" />
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
                     Amount
                   </th>
-                  <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Method
+                  <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
+                    Paid
+                  </th>
+                  <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
+                    Balance
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Payment Date <ChevronDown size={12} className="inline text-[#FF9933]" />
+                    Due Date <ChevronDown size={12} className="inline text-stone-400" />
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Invoice
+                    Status <ChevronDown size={12} className="inline text-stone-400" />
                   </th>
                   <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    Tags
+                    Academic Year
                   </th>
-                  <th className="py-4 px-4 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
-                    Receipt
+                  <th className="py-4 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
+                    {/* Actions */}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 bg-white">
-                {payments.map((p, i) => (
+                {invoices.map((inv, i) => (
                   <tr key={i} className="hover:bg-stone-50/50 transition-colors group">
                     <td className="py-4 pl-5 pr-2 whitespace-nowrap">
                       <input type="checkbox" className="w-3.5 h-3.5 rounded border-stone-300 text-[#FF9933] focus:ring-[#FF9933]" />
                     </td>
                     <td className="py-4 px-3 whitespace-nowrap">
-                      <span className="font-bold text-[12px] text-[#FF9933] hover:underline cursor-pointer">{p.receiptId || p._id}</span>
+                      <span className="font-bold text-[12px] text-[#FF9933] hover:underline cursor-pointer">{inv.invoiceId || inv._id}</span>
                     </td>
                     <td className="py-4 px-3 whitespace-nowrap">
-                      <div className="font-black text-[13px] text-stone-800">{p.studentName || "—"}</div>
-                    </td>
-                    <td className="py-4 px-3 whitespace-nowrap">
-                      <span className="font-bold text-[11px] text-stone-400 tracking-wider font-mono">{p.student || "—"}</span>
+                      <div className="font-black text-[13px] text-stone-800">{inv.studentName || "—"}</div>
+                      <div className="font-bold text-[10px] text-stone-400 tracking-wider font-mono mt-0.5">{inv.student || "—"}</div>
                     </td>
                     <td className="py-4 px-3 whitespace-nowrap text-right">
-                      <span className="font-bold text-[13px] text-green-600">₹{p.amount || 0}</span>
+                      <span className="font-bold text-[13px] text-stone-800">₹{inv.amount || 0}</span>
+                    </td>
+                    <td className="py-4 px-3 whitespace-nowrap text-right">
+                      <span className="font-bold text-[13px] text-green-600">₹{inv.paidAmount || 0}</span>
+                    </td>
+                    <td className="py-4 px-3 whitespace-nowrap text-right">
+                      <span className="font-bold text-[13px] text-red-600">₹{(inv.amount || 0) - (inv.paidAmount || 0)}</span>
                     </td>
                     <td className="py-4 px-3 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-widest uppercase border ${getMethodColor(p.method)}`}>
-                        {p.method || "—"}
+                      <span className="font-bold text-[12px] text-stone-600">{formatDate(inv.dueDate)}</span>
+                    </td>
+                    <td className="py-4 px-3 whitespace-nowrap">
+                      <span className={`px-2.5 py-1 rounded-md text-[10px] font-black tracking-widest uppercase border ${
+                        inv.status === 'Paid' ? 'bg-green-50 text-green-600 border-green-200' :
+                        inv.status === 'Overdue' ? 'bg-red-50 text-red-600 border-red-200' :
+                        'bg-amber-50 text-amber-600 border-amber-200'
+                      }`}>
+                        {inv.status || "Pending"}
                       </span>
                     </td>
                     <td className="py-4 px-3 whitespace-nowrap">
-                      <span className="font-bold text-[12px] text-stone-600">{formatDate(p.createdAt)}</span>
-                    </td>
-                    <td className="py-4 px-3 whitespace-nowrap">
-                      {p.invoiceId ? (
-                        <span className="font-bold text-[11px] text-stone-400 hover:text-[#FF9933] hover:underline tracking-wider font-mono cursor-pointer">{p.invoiceId}</span>
-                      ) : (
-                        <span className="text-stone-300">—</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-3 whitespace-nowrap">
-                      {p.tags && p.tags.length > 0 ? p.tags.map((tag, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-widest uppercase bg-stone-100 text-stone-500 border border-stone-200">
-                          {tag}
-                        </span>
-                      )) : (
-                        <span className="text-stone-300">—</span>
-                      )}
+                      <span className="font-bold text-[12px] text-stone-500">{inv.academicYear || "—"}</span>
                     </td>
                     <td className="py-4 px-4 whitespace-nowrap text-right">
-                      <button className="text-stone-400 hover:text-[#FF9933] transition-colors">
+                      <button className="text-stone-400 hover:text-stone-600 transition-colors">
                         <Download size={16} />
                       </button>
                     </td>
@@ -228,7 +239,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Footer / Pagination */}
-        {!loading && payments.length > 0 && (
+        {!loading && invoices.length > 0 && (
           <div className="p-4 border-t border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
             <div className="text-[12px] font-bold text-stone-500">
               {((page - 1) * limit) + 1}–{Math.min(page * limit, totalRecords)} of <span className="font-black text-stone-900">{totalRecords}</span>

@@ -1,459 +1,365 @@
-'use client';
-import { 
-  User, 
-  FileText, 
-  Copy, 
-  ShieldCheck, 
-  BookOpen, 
-  Users, 
-  Lock, 
-  ChevronDown,
-  Eye,
-  EyeOff
-} from 'lucide-react';
+"use client";
+
 import { useState, useEffect } from 'react';
+import { User, Lock, ChevronDown, ChevronUp, Building2, Palette, Smartphone, LayoutTemplate, Upload, RotateCcw } from 'lucide-react';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('profile');
-  const [isPasswordExpanded, setIsPasswordExpanded] = useState(false);
-  const [showPassword, setShowPassword] = useState({
-    current: false,
-    new: false,
-    confirm: false
-  });
-  
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-  const [passwordMsg, setPasswordMsg] = useState({ type: '', text: '' });
+    const [activeTab, setActiveTab] = useState('My Profile');
+    const [isPasswordExpanded, setIsPasswordExpanded] = useState(false);
+    const [userRole, setUserRole] = useState('student');
+    const [profile, setProfile] = useState({ name: 'Loading...', email: 'Loading...', role: 'student' });
+    
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const token = localStorage.getItem("token");
+                const res = await fetch('/api/student/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setProfile({ name: data.name || data.firstName + ' ' + data.lastName, email: data.email, role: data.role });
+                    setUserRole(data.role);
+                } else {
+                    const userData = localStorage.getItem("user");
+                    if (userData) {
+                        const parsed = JSON.parse(userData);
+                        setUserRole(parsed.role || "student");
+                        setProfile({ name: parsed.name, email: parsed.email, role: parsed.role });
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        fetchProfile();
+    }, []);
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`/api/student/profile`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setProfile(data);
-        }
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+    // Dummy / Brand Data for School Profile
+    const [schoolData, setSchoolData] = useState({
+        name: "ASTNIQ Academy",
+        tagline: "Innovating Education for Tomorrow",
+        address: "456 Learning Blvd, Tech District, Bangalore - 560001",
+        phone: "+91 98765 43210",
+        email: "admin@astniq.com",
+        established: "2024",
+        website: "www.astniq.com",
+        code: "ASTNIQ",
+        subdomain: "portal.astniq.com"
+    });
 
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      return setPasswordMsg({ type: 'error', text: 'New passwords do not match' });
-    }
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/student/profile/password`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
-        body: JSON.stringify({
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setPasswordMsg({ type: 'success', text: 'Password updated successfully' });
-        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      } else {
-        setPasswordMsg({ type: 'error', text: data.message || 'Error updating password' });
-      }
-    } catch (err) {
-      setPasswordMsg({ type: 'error', text: 'Server error' });
-    }
-  };
+    const adminTabs = [
+        "My Profile",
+        "School Profile",
+        "Academic Years",
+        "Class Mediums",
+        "Departments",
+        "Manage Roles",
+        "Attendance & Schedule",
+        "Salary Grades",
+        "Salary Structures",
+        "Fee Categories",
+        "Subjects",
+        "Timetable Periods"
+    ];
 
-  if (loading) {
-    return <div className="h-full flex items-center justify-center bg-[#FAFAFA]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F97316]"></div></div>;
-  }
+    const tabs = userRole === 'admin' ? adminTabs : ["My Profile"];
 
-  const p = profile?.profile || {};
-
-  return (
-    <div className="h-full flex flex-col p-4 sm:p-6 overflow-y-auto bg-[#FAFAFA]">
-      <div className="flex flex-col lg:flex-row gap-4 items-start w-full max-w-6xl mx-auto">
-        
-        {/* Settings Navigation Sidebar */}
-        <nav className="w-full lg:w-52 flex-shrink-0 bg-white rounded-2xl border border-stone-200 shadow-sm p-2 space-y-0.5">
-          <button 
-            onClick={() => setActiveTab('profile')}
-            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-all text-left ${
-              activeTab === 'profile' 
-                ? 'bg-[#F97316] text-white shadow-sm' 
-                : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
-            }`}
-          >
-            <User className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
-            My Profile
-          </button>
-          <button 
-            onClick={() => setActiveTab('documents')}
-            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-all text-left ${
-              activeTab === 'documents' 
-                ? 'bg-[#F97316] text-white shadow-sm' 
-                : 'text-stone-500 hover:bg-stone-50 hover:text-stone-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
-            Documents
-          </button>
-        </nav>
-
-        {/* Content Area */}
-        <div className="flex-1 min-w-0 w-full">
-          <div className="max-w-3xl space-y-4">
-            
-            {activeTab === 'profile' && (
-              <>
-                {/* Header */}
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-5 bg-[#F97316] rounded-full"></div>
-                    <h1 className="text-xl font-bold text-stone-900 tracking-tight">
-                      My Profile
-                    </h1>
-                  </div>
-                  <p className="text-sm text-stone-500 font-medium ml-3.5 mt-0.5">
-                    Manage your details and account password
-                  </p>
-                </div>
-
-                {/* Main Profile Card */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
-                  <div className="flex flex-col sm:flex-row items-start gap-5">
-                    <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black text-white flex-shrink-0 shadow-sm bg-gradient-to-br from-[#F97316] to-[#ea580c]">
-                      SB
-                    </div>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <h2 className="text-xl font-black text-stone-900 tracking-tight leading-tight">
-                        {profile?.name || 'Loading...'}
-                      </h2>
-                      <p className="text-xs font-mono font-bold mt-0.5 text-[#ea580c]">
-                        {profile?.schoolId || '---'}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-2.5">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-stone-100 text-stone-600">
-                          <BookOpen className="w-3 h-3" />
-                          {p.className || '-'} – {p.section || '-'}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-teal-50 text-teal-700">
-                          English
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">
-                          <ShieldCheck className="w-3 h-3" />
-                          {p.academicYear || '-'}
-                        </span>
-                        <span className="bg-green-50 text-green-700 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full">
-                          {p.status || 'active'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div className="mt-5 pt-5 border-t border-stone-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="group">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">
-                        Phone
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold text-stone-800">
-                          {p.phone || '-'}
-                        </p>
-                        <button className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-stone-100 text-stone-400 hover:text-stone-600">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="group">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1">
-                        Email
-                      </p>
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold text-stone-800 truncate">
-                          {profile?.email || '-'}
-                        </p>
-                        <button className="p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-stone-100 text-stone-400 hover:text-stone-600 flex-shrink-0">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Personal Information */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-stone-100 flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-orange-50">
-                      <User className="w-4 h-4 text-[#F97316]" />
-                    </div>
-                    <h3 className="text-sm font-black text-stone-800">
-                      Personal Information
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 divide-y sm:divide-y-0 sm:divide-x divide-stone-100">
-                    <div className="px-5 py-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                        Date of Birth
-                      </p>
-                      <p className="text-sm font-semibold text-stone-800">
-                        {p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                      </p>
-                    </div>
-                    <div className="px-5 py-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                        Gender
-                      </p>
-                      <p className="text-sm font-semibold text-stone-800">
-                        {p.gender || '-'}
-                      </p>
-                    </div>
-                    <div className="px-5 py-4 border-t border-stone-100">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                        Blood Group
-                      </p>
-                      <p className="text-sm font-semibold text-stone-800">
-                        {p.bloodGroup || '-'}
-                      </p>
-                    </div>
-                    <div className="px-5 py-4 border-t border-stone-100">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                        Admission Date
-                      </p>
-                      <p className="text-sm font-semibold text-stone-800">
-                        {p.admissionDate ? new Date(p.admissionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                      </p>
-                    </div>
-                    <div className="px-5 py-4 sm:col-span-2 border-t border-stone-100">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                        Address
-                      </p>
-                      <p className="text-sm font-semibold text-stone-800">
-                        {p.address || '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Parent / Guardian */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-stone-100 flex items-center gap-3">
-                    <div className="p-1.5 rounded-lg bg-stone-100">
-                      <Users className="w-4 h-4 text-stone-500" />
-                    </div>
-                    <h3 className="text-sm font-black text-stone-800">
-                      Parent / Guardian
-                    </h3>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-stone-100">
-                    <div className="px-5 py-5 space-y-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-[#F97316]">
-                        Father
-                      </p>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                          Name
-                        </p>
-                        <p className="text-sm font-semibold text-stone-800">
-                          {p.parentDetails?.fatherName || '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                          Phone
-                        </p>
-                        <p className="text-sm font-semibold text-stone-800">
-                          {p.parentDetails?.fatherPhone || '-'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="px-5 py-5 space-y-4">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-[#F97316]">
-                        Mother
-                      </p>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                          Name
-                        </p>
-                        <p className="text-sm font-semibold text-stone-800">
-                          {p.parentDetails?.motherName || '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-0.5">
-                          Phone
-                        </p>
-                        <p className="text-sm font-semibold text-stone-800">
-                          {p.parentDetails?.motherPhone || '-'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Change Password */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-                  <button 
-                    onClick={() => setIsPasswordExpanded(!isPasswordExpanded)}
-                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-stone-50/80 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-1.5 rounded-lg bg-stone-100">
-                        <Lock className="w-4 h-4 text-stone-500" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-black text-stone-800">
-                          Change Password
-                        </p>
-                        <p className="text-[10px] font-bold text-stone-400 mt-0.5">
-                          Update your account password
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${isPasswordExpanded ? 'rotate-180' : ''}`} strokeWidth={2.5} />
-                  </button>
-                  
-                  {isPasswordExpanded && (
-                    <form onSubmit={handlePasswordSubmit} className="px-5 pb-5 pt-2 border-t border-stone-100">
-                      {passwordMsg.text && (
-                        <div className={`p-3 rounded-lg mb-4 text-xs font-bold ${passwordMsg.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                          {passwordMsg.text}
-                        </div>
-                      )}
-                      <div className="flex flex-col gap-4 mt-2">
-                        {/* Current Password */}
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold text-stone-700 uppercase tracking-wide">
-                            Current Password
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type={showPassword.current ? "text" : "password"} 
-                              value={passwordForm.currentPassword}
-                              onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
-                              required
-                              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg text-stone-800 focus:outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316]"
-                              placeholder="Enter current password"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => setShowPassword({...showPassword, current: !showPassword.current})}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+    return (
+        <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+            <div className="flex flex-col md:flex-row gap-6 lg:gap-12">
+                
+                {/* Left Sidebar Navigation */}
+                <div className="w-full md:w-64 flex-shrink-0">
+                    <div className="bg-white rounded-xl border border-stone-200 shadow-sm py-2 overflow-hidden flex flex-col">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`text-left px-5 py-3 text-[14px] font-bold transition-colors ${
+                                    activeTab === tab 
+                                    ? 'bg-[#FF9933] text-white m-1 rounded-lg shadow-sm shadow-orange-500/20' 
+                                    : 'text-stone-600 hover:bg-stone-50'
+                                }`}
                             >
-                              {showPassword.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                {tab}
                             </button>
-                          </div>
-                        </div>
-                        
-                        {/* New Password */}
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold text-stone-700 uppercase tracking-wide">
-                            New Password
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type={showPassword.new ? "text" : "password"} 
-                              value={passwordForm.newPassword}
-                              onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
-                              required
-                              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg text-stone-800 focus:outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316]"
-                              placeholder="Enter new password"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => setShowPassword({...showPassword, new: !showPassword.new})}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                            >
-                              {showPassword.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Confirm New Password */}
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-xs font-bold text-stone-700 uppercase tracking-wide">
-                            Confirm New Password
-                          </label>
-                          <div className="relative">
-                            <input 
-                              type={showPassword.confirm ? "text" : "password"} 
-                              value={passwordForm.confirmPassword}
-                              onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
-                              required
-                              className="w-full px-3 py-2 text-sm border border-stone-200 rounded-lg text-stone-800 focus:outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316]"
-                              placeholder="Confirm new password"
-                            />
-                            <button 
-                              type="button"
-                              onClick={() => setShowPassword({...showPassword, confirm: !showPassword.confirm})}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                            >
-                              {showPassword.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Submit Button */}
-                        <div className="flex justify-end mt-2">
-                          <button type="submit" className="px-5 py-2 bg-stone-900 hover:bg-stone-800 text-white text-sm font-bold rounded-lg transition-colors shadow-sm">
-                            Update Password
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </>
-            )}
-
-            {activeTab === 'documents' && (
-              <>
-                {/* Header */}
-                <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-5 bg-[#F97316] rounded-full"></div>
-                    <h1 className="text-xl font-bold text-stone-900 tracking-tight">
-                      Documents
-                    </h1>
-                  </div>
-                  <p className="text-sm text-stone-500 font-medium ml-3.5 mt-0.5">
-                    Files and documents shared with the school
-                  </p>
+                        ))}
+                    </div>
                 </div>
 
-                {/* Empty State */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">
-                  <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center mb-4">
-                    <FileText className="w-6 h-6 text-[#F97316]" />
-                  </div>
-                  <h3 className="text-sm font-black text-stone-800 mb-1">
-                    No documents on file
-                  </h3>
-                  <p className="text-xs text-stone-500">
-                    Documents uploaded by the school on your behalf will appear here.
-                  </p>
-                </div>
-              </>
-            )}
+                {/* Main Content Area */}
+                <div className="flex-1 space-y-6">
+                    
+                    {/* Header */}
+                    <div>
+                        <h1 className="text-2xl font-black text-stone-900 tracking-tight">{activeTab}</h1>
+                        <p className="text-[13px] font-bold text-stone-500 mt-1">
+                            {activeTab === 'My Profile' ? 'Manage your account details and password' : 'Manage system settings'}
+                        </p>
+                    </div>
 
-          </div>
+                    {activeTab === 'My Profile' && (
+                        <div className="space-y-4">
+                            
+                            {/* Account Details Card */}
+                            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                                <div className="p-5 flex items-center gap-4 border-b border-stone-100">
+                                    <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center flex-shrink-0">
+                                        <User size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-stone-900">Account Details</h2>
+                                        <p className="text-[12px] font-bold text-stone-500">Hover a field and click the pencil to edit</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-col">
+                                    {/* Profile Photo */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-4 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">
+                                            Profile Photo
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-[#FF9933] rounded-lg text-white font-black flex items-center justify-center text-lg shadow-sm">
+                                                DA
+                                            </div>
+                                            <span className="text-[13px] font-bold text-stone-500">
+                                                Click photo to change • JPG, PNG, WebP
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Name */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">
+                                            Name
+                                        </div>
+                                        <div className="flex-1 text-[13px] font-black text-stone-800">
+                                            {profile.name}
+                                        </div>
+                                    </div>
+
+                                    {/* Email */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">
+                                            Email
+                                        </div>
+                                        <div className="flex-1 text-[13px] font-black text-stone-800">
+                                            {profile.email}
+                                        </div>
+                                    </div>
+
+                                    {/* Phone */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">
+                                            Phone
+                                        </div>
+                                        <div className="flex-1 text-[13px] font-bold italic text-stone-400">
+                                            Not set
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Change Password Card */}
+                            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden transition-colors">
+                                <div 
+                                    className="p-5 flex items-center justify-between cursor-pointer hover:bg-stone-50/50"
+                                    onClick={() => setIsPasswordExpanded(!isPasswordExpanded)}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
+                                            <Lock size={18} strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-base font-bold text-stone-900">Change Password</h2>
+                                            <p className="text-[12px] font-bold text-stone-500">Update your admin account password</p>
+                                        </div>
+                                    </div>
+                                    {isPasswordExpanded ? (
+                                        <ChevronUp size={18} className="text-stone-400" />
+                                    ) : (
+                                        <ChevronDown size={18} className="text-stone-400" />
+                                    )}
+                                </div>
+                                
+                                {isPasswordExpanded && (
+                                    <div className="p-6 pt-2">
+                                        <div className="border-t border-stone-100 pt-6 space-y-6">
+                                            <div className="flex flex-col gap-2.5">
+                                                <label className="text-[11px] font-black uppercase tracking-widest text-stone-400">Current Password</label>
+                                                <input 
+                                                    type="password" 
+                                                    placeholder="Enter current password" 
+                                                    className="w-full sm:w-2/3 md:w-[60%] px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-bold text-stone-800 placeholder-stone-400 focus:outline-none focus:border-orange focus:ring-2 focus:ring-orange/20"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-2.5">
+                                                <label className="text-[11px] font-black uppercase tracking-widest text-stone-400">New Password</label>
+                                                <input 
+                                                    type="password" 
+                                                    placeholder="Minimum 8 characters" 
+                                                    className="w-full sm:w-2/3 md:w-[60%] px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-bold text-stone-800 placeholder-stone-400 focus:outline-none focus:border-orange focus:ring-2 focus:ring-orange/20"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-2.5">
+                                                <label className="text-[11px] font-black uppercase tracking-widest text-stone-400">Confirm New Password</label>
+                                                <input 
+                                                    type="password" 
+                                                    placeholder="Re-enter new password" 
+                                                    className="w-full sm:w-2/3 md:w-[60%] px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-bold text-stone-800 placeholder-stone-400 focus:outline-none focus:border-orange focus:ring-2 focus:ring-orange/20"
+                                                />
+                                            </div>
+                                            <div className="pt-2">
+                                                <button className="px-6 py-3 rounded-lg text-[13px] font-black tracking-wide bg-[#FCDDBB] text-stone-600 hover:bg-[#FBCE9A] transition-colors">
+                                                    UPDATE PASSWORD
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+                    )}
+
+                    {activeTab === 'School Profile' && (
+                        <div className="space-y-4">
+                            
+                            {/* School Details Card */}
+                            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                                <div className="p-5 flex items-center gap-4 border-b border-stone-100">
+                                    <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
+                                        <Building2 size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-stone-900">School Details</h2>
+                                        <p className="text-[12px] font-bold text-stone-500">Click the pencil icon next to any field to edit it</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-col">
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">School Name</div>
+                                        <div className="flex-1 text-[13px] font-black text-stone-800">{schoolData.name}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Tagline / Motto</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.tagline}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Full Address</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.address}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Phone</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.phone}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Email</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.email}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Year Established</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.established}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Website</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.website}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Campus Login Code</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-600">{schoolData.code}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Branding Card */}
+                            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+                                <div className="p-5 flex items-center gap-4 border-b border-stone-100">
+                                    <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
+                                        <Palette size={18} strokeWidth={2.5} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-stone-900">Branding</h2>
+                                        <p className="text-[12px] font-bold text-stone-500">Subdomain, logo and brand color shown to your school's users</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-2 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Subdomain</div>
+                                        <div className="flex-1 text-[13px] font-bold text-stone-800">{schoolData.subdomain}</div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 border-b border-stone-100 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-4 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Logo</div>
+                                        <div className="flex-1">
+                                            <button className="flex items-center gap-2 px-4 py-2 border border-stone-200 rounded-lg text-[12px] font-bold text-stone-600 bg-white hover:bg-stone-50 shadow-sm transition-colors">
+                                                <Upload size={14} /> Upload Logo
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center p-5 group transition-colors hover:bg-stone-50/50 cursor-pointer gap-4 sm:gap-0">
+                                        <div className="w-48 text-[11px] font-black tracking-widest text-stone-400 uppercase">Primary Color</div>
+                                        <div className="flex-1 flex items-center gap-4">
+                                            <div className="w-8 h-8 rounded-full bg-[#FF9933] shadow-inner border border-black/10"></div>
+                                            <div className="flex items-center gap-2">
+                                                <button className="px-3 py-1.5 rounded-md text-[11px] font-black uppercase tracking-widest bg-stone-900 text-white hover:bg-stone-800 transition-colors">Save</button>
+                                                <button className="px-3 py-1.5 rounded-md text-[11px] font-black uppercase tracking-widest text-stone-500 hover:bg-stone-100 transition-colors flex items-center gap-1"><RotateCcw size={12} /> Reset</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Branded App & Preview Cards Layout */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                
+                                {/* Branded App */}
+                                <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+                                    <div className="p-5 flex items-center gap-4 border-b border-stone-100">
+                                        <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
+                                            <Smartphone size={18} strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-base font-bold text-stone-900">Branded App</h2>
+                                            <p className="text-[11px] font-bold text-stone-500 mt-0.5 leading-snug">Build an Android app with your school's name, icon and package - students never see "{schoolData.name}"</p>
+                                        </div>
+                                    </div>
+                                    <div className="p-5 flex-1 flex flex-col justify-center gap-3 bg-red-50/50">
+                                        <p className="text-[13px] font-bold text-red-700">Build failed (run 27700354988). Check the GitHub Actions log for details.</p>
+                                        <div>
+                                            <button className="px-4 py-2 rounded-lg text-[12px] font-bold bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors shadow-sm">Try again</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Preview Card */}
+                                <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+                                    <div className="p-5 flex items-center gap-4 border-b border-stone-100">
+                                        <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
+                                            <LayoutTemplate size={18} strokeWidth={2.5} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-base font-bold text-stone-900">Preview - ID Card / PDF Header</h2>
+                                        </div>
+                                    </div>
+                                    <div className="p-5 flex-1 flex items-center justify-center bg-stone-50/50">
+                                        <div className="bg-white border border-stone-200 shadow-sm p-4 rounded-xl w-full max-w-sm text-center">
+                                            <h3 className="text-[15px] font-black text-stone-900 uppercase tracking-wide text-[#FF9933]">{schoolData.name}</h3>
+                                            <p className="text-[10px] font-medium text-stone-500 mt-1 mb-2 max-w-[200px] mx-auto leading-tight">{schoolData.address}</p>
+                                            <p className="text-[9px] font-bold text-stone-400 tracking-wider">Est. {schoolData.established} | {schoolData.phone} | {schoolData.email}</p>
+                                            <div className="h-px bg-stone-200 w-full my-2"></div>
+                                            <p className="text-[10px] font-black text-stone-600 italic">{schoolData.tagline}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            </div>
         </div>
-
-      </div>
-    </div>
-  );
+    );
 }
