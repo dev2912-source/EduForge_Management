@@ -1079,7 +1079,7 @@ router.post('/promotions', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
 
-    const { studentIds, fromClass, toClass, newAcademicYear } = req.body;
+    const { studentIds, fromClass, toClass, toSection, newAcademicYear, remarks } = req.body;
 
     const classOrder = ['LKG','UKG','Class 1','Class 2','Class 3','Class 4','Class 5','Class 6','Class 7','Class 8','Class 9','Class 10','Class 11','Class 12'];
     const toClassIndex = classOrder.indexOf(toClass);
@@ -1095,13 +1095,15 @@ router.post('/promotions', protect, async (req, res) => {
           student: student._id,
           academicYear: newAcademicYear || '2025-2026',
           className: toClass,
-          section: student.profile.section,
+          section: toSection || student.profile.section,
           status: 'promoted',
-          remarks: `Promoted from ${fromClass}`
+          remarks: remarks || `Promoted from ${fromClass}`
         });
 
         student.profile.className = toClass;
+        if (toSection) student.profile.section = toSection;
         student.profile.academicYear = newAcademicYear || '2025-2026';
+        student.profile.status = 'active';
         await student.save();
 
         results.push({ id: student._id, name: student.name, promoted: true });
@@ -1113,13 +1115,15 @@ router.post('/promotions', protect, async (req, res) => {
           student: student._id,
           academicYear: newAcademicYear || '2025-2026',
           className: toClass,
-          section: student.profile.section,
+          section: toSection || student.profile.section,
           status: 'promoted',
-          remarks: `Promoted from ${fromClass}`
+          remarks: remarks || `Promoted from ${fromClass}`
         });
 
         student.profile.className = toClass;
+        if (toSection) student.profile.section = toSection;
         student.profile.academicYear = newAcademicYear || '2025-2026';
+        student.profile.status = 'active';
         await student.save();
 
         results.push({ id: student._id, name: student.name, promoted: true });
