@@ -458,9 +458,23 @@ router.get('/classes/:id', protect, async (req, res) => {
             return res.status(403).json({ message: 'Not authorized as an admin' });
         }
 
-        const cls = await ClassModel.findById(req.params.id).lean();
+        let cls;
+        try {
+            cls = await ClassModel.findById(req.params.id).lean();
+        } catch (castErr) {
+            console.log('Cast error, trying string match:', castErr.message);
+            cls = await ClassModel.findOne({ name: req.params.id }).lean();
+        }
+
         if (!cls) {
-            return res.status(404).json({ success: false, message: 'Class not found' });
+            const total = await ClassModel.countDocuments({});
+            const sample = await ClassModel.findOne({}).lean();
+            console.log('Class not found. Total classes:', total, 'Sample:', sample);
+            return res.status(404).json({
+                success: false,
+                message: 'Class not found',
+                debug: { id: req.params.id, totalClasses: total, sampleId: sample ? sample._id.toString() : null }
+            });
         }
         const studentsCount = await User.countDocuments({ role: 'student', 'profile.className': cls.name });
         res.json({ success: true, data: { ...cls, studentsCount } });
@@ -920,6 +934,51 @@ router.post('/fee-structures', protect, async (req, res) => {
     const fs = await FeeStructure.create(req.body);
     res.status(201).json({ success: true, data: fs });
   } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST /api/admin/fee-structures/import - Import fee structures from CSV/Excel
+router.post('/fee-structures/import', protect, upload.single('file'), async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+
+    let count = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        const row = rows[i];
+        const feeStructure = {
+          className: row.className || row.class || row.Class || '',
+          academicYear: row.academicYear || row.academic_year || row['Academic Year'] || '',
+          category: row.category || row.Category || row.feeCategory || '',
+          amount: parseFloat(row.amount || row.Amount || row.feeAmount || 0),
+          frequency: row.frequency || row.Frequency || 'Monthly',
+          dueDay: parseInt(row.dueDay || row.due_day || row['Due Day'] || row['Due Day of Month'] || 10, 10)
+        };
+
+        if (!feeStructure.className || !feeStructure.category || !feeStructure.amount) {
+          errors.push({ row: i + 2, message: 'Missing required fields (className, category, amount)' });
+          continue;
+        }
+
+        await FeeStructure.create(feeStructure);
+        count++;
+      } catch (rowErr) {
+        errors.push({ row: i + 2, message: rowErr.message });
+      }
+    }
+
+    res.json({ success: true, count, errors });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server Error' });
   }
 });
@@ -1432,4 +1491,5 @@ router.post('/students/bulk-graduate', protect, async (req, res) => {
   }
 });
 
+console.log('[adminRoutes] Loaded with', router.stack.length, 'route layers');
 module.exports = router;
