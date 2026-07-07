@@ -458,23 +458,9 @@ router.get('/classes/:id', protect, async (req, res) => {
             return res.status(403).json({ message: 'Not authorized as an admin' });
         }
 
-        let cls;
-        try {
-            cls = await ClassModel.findById(req.params.id).lean();
-        } catch (castErr) {
-            console.log('Cast error, trying string match:', castErr.message);
-            cls = await ClassModel.findOne({ name: req.params.id }).lean();
-        }
-
+        const cls = await ClassModel.findById(req.params.id).lean();
         if (!cls) {
-            const total = await ClassModel.countDocuments({});
-            const sample = await ClassModel.findOne({}).lean();
-            console.log('Class not found. Total classes:', total, 'Sample:', sample);
-            return res.status(404).json({
-                success: false,
-                message: 'Class not found',
-                debug: { id: req.params.id, totalClasses: total, sampleId: sample ? sample._id.toString() : null }
-            });
+            return res.status(404).json({ success: false, message: 'Class not found' });
         }
         const studentsCount = await User.countDocuments({ role: 'student', 'profile.className': cls.name });
         res.json({ success: true, data: { ...cls, studentsCount } });
@@ -1491,5 +1477,4 @@ router.post('/students/bulk-graduate', protect, async (req, res) => {
   }
 });
 
-console.log('[adminRoutes] Loaded with', router.stack.length, 'route layers');
 module.exports = router;
