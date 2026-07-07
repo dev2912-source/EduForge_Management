@@ -1370,4 +1370,41 @@ router.get('/students/:id/documents', protect, async (req, res) => {
   }
 });
 
+// POST /api/admin/students/bulk-graduate - Graduate multiple students
+router.post('/students/bulk-graduate', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const { studentIds, academicYear, remarks } = req.body;
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ message: 'No student IDs provided' });
+    }
+
+    const results = [];
+
+    for (const studentId of studentIds) {
+      const student = await User.findById(studentId);
+      if (!student || student.role !== 'student') continue;
+
+      await AcademicHistory.create({
+        student: student._id,
+        academicYear: academicYear || '2025-2026',
+        className: student.profile.className,
+        section: student.profile.section,
+        status: 'graduated',
+        remarks: remarks || 'Graduated'
+      });
+
+      student.profile.status = 'graduated';
+      await student.save();
+      results.push({ id: student._id, name: student.name, graduated: true });
+    }
+
+    res.json({ success: true, count: results.length, data: results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 module.exports = router;
