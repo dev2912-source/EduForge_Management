@@ -837,17 +837,43 @@ function convertTo24h(timeStr) {
 }
 
 // PUT /api/staff/profile - Update own profile
-router.put('/profile', protect, staffOnly, async (req, res) => {
+router.put('/profile', protect, async (req, res) => {
   try {
-    const { phone, address, gender, dateOfBirth } = req.body;
+    const { name, phone, gender, dateOfBirth, bloodGroup, address, nationality, religion } = req.body;
     const updateData = {};
+    if (name) updateData.name = name;
     if (phone) updateData['profile.phone'] = phone;
-    if (address) updateData['profile.address'] = address;
     if (gender) updateData['profile.gender'] = gender;
     if (dateOfBirth) updateData['profile.dateOfBirth'] = dateOfBirth;
+    if (bloodGroup) updateData['profile.bloodGroup'] = bloodGroup;
+    if (address) updateData['profile.address'] = address;
+    if (nationality) updateData['profile.nationality'] = nationality;
+    if (religion) updateData['profile.religion'] = religion;
 
-    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true });
-    res.json({ success: true, data: user });
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true }).select('-password').lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const p = user.profile || {};
+    res.json({
+      success: true,
+      data: {
+        name: user.name || '',
+        email: user.email || '',
+        schoolId: user.schoolId || '',
+        department: user.department || '',
+        designation: user.designation || '',
+        employmentType: user.employmentType || '',
+        dateOfJoining: user.dateOfJoining || null,
+        phone: p.phone || '',
+        gender: p.gender || '',
+        dateOfBirth: p.dateOfBirth || null,
+        bloodGroup: p.bloodGroup || '',
+        address: p.address || '',
+        nationality: p.nationality || '',
+        religion: p.religion || '',
+        photoUrl: p.photoUrl || ''
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server Error' });
