@@ -18,6 +18,14 @@ const AttendanceSchema = new mongoose.Schema({
     remark: {
         type: String,
         default: '—'
+    },
+    submitted: {
+        type: Boolean,
+        default: false
+    },
+    submittedAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
 

@@ -8,7 +8,9 @@ const invoiceSchema = new mongoose.Schema({
     paidAmount: { type: String, default: '₹0' },
     balance: { type: String },
     dueDate: { type: String, required: true },
-    status: { type: String, required: true, default: 'Pending' }
+    status: { type: String, required: true, default: 'Pending' },
+    feeStructure: { type: mongoose.Schema.Types.ObjectId, ref: 'FeeStructure' },
+    academicYear: { type: String }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

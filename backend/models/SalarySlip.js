@@ -10,6 +10,7 @@ const SalarySlipSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    slipMonth: Date,
     gross: {
         type: Number,
         required: true,
@@ -29,7 +30,17 @@ const SalarySlipSchema = new mongoose.Schema({
         type: String,
         enum: ['Paid', 'Pending', 'Unpaid'],
         default: 'Pending'
-    }
+    },
+    basic: { type: Number, default: 0 },
+    hra: { type: Number, default: 0 },
+    da: { type: Number, default: 0 },
+    ta: { type: Number, default: 0 },
+    otherAllowances: { type: Number, default: 0 },
+    pfDeduction: { type: Number, default: 0 },
+    taxDeduction: { type: Number, default: 0 },
+    otherDeductions: { type: Number, default: 0 },
+    paymentDate: Date,
+    pdfPath: String
 }, { timestamps: true });
 
 module.exports = mongoose.model('SalarySlip', SalarySlipSchema);

@@ -131,6 +131,11 @@ router.get('/staff', protect, async (req, res) => {
             student: req.user._id,
             date: { $gte: today }
         });
+        const todayClock = attendance ? {
+            clock_status: attendance.status === 'Present' ? 'clocked_in' : attendance.status === 'Late' ? 'clocked_in' : 'not_in',
+            is_late: attendance.status === 'Late',
+            clock_in_at: attendance.createdAt || attendance.date
+        } : { clock_status: 'not_in', is_late: false, clock_in_at: null };
 
         const pendingLeaves = await LeaveRequest.countDocuments({
             student: req.user._id,
@@ -140,10 +145,51 @@ router.get('/staff', protect, async (req, res) => {
         const latestSalary = await SalarySlip.findOne({ staff: req.user._id })
             .sort({ createdAt: -1 });
 
+        const user = await User.findById(req.user._id).select('firstName lastName name department designation schoolId');
+
+        const summary = {
+            present: 0, absent: 0, late: 0, on_leave: 0, total_worked_minutes: 0
+        };
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        const monthRecords = await Attendance.find({
+            student: req.user._id,
+            date: { $gte: monthStart, $lte: monthEnd }
+        });
+        monthRecords.forEach(r => {
+            const s = r.status.toLowerCase();
+            if (s === 'present') summary.present++;
+            else if (s === 'absent') summary.absent++;
+            else if (s === 'late') summary.late++;
+            else if (s === 'leave') summary.on_leave++;
+        });
+
+        const recentLeaves = await LeaveRequest.find({ student: req.user._id })
+            .sort({ createdAt: -1 }).limit(3);
+
         res.json({
-            todayClock: attendance ? (attendance.status === 'present' ? 'Clocked In' : 'Absent') : 'Not In',
+            profile: user,
+            todayClock,
+            thisMonth: summary,
             pendingLeaves,
-            latestSalary
+            latestSalary: latestSalary ? {
+                _id: latestSalary._id,
+                slipMonth: latestSalary.slipMonth,
+                month: latestSalary.month,
+                gross_salary: latestSalary.gross || latestSalary.net + (latestSalary.deductions || 0),
+                deductions: latestSalary.deductions || 0,
+                net_salary: latestSalary.net || latestSalary.gross - (latestSalary.deductions || 0),
+                payment_status: latestSalary.status || 'Pending',
+                createdAt: latestSalary.createdAt
+            } : null,
+            recentLeaves: recentLeaves.map(l => ({
+                _id: l._id,
+                start_date: l.fromDate || l.start_date,
+                end_date: l.toDate || l.end_date,
+                reason: l.reason,
+                status: l.status
+            }))
         });
     } catch (err) {
         console.error(err);

@@ -209,18 +209,31 @@ const seedData = async () => {
     // ── 4. STAFF ──
     const salt = await bcrypt.genSalt(10);
     const hashedPass = await bcrypt.hash('Test@123', salt);
-    const staffDocs = staffNames.map((name, i) => ({
-      name,
-      email: `staff${i + 1}@edufordge.com`,
-      schoolId: `STF-2026-${(i + 1).toString().padStart(4, '0')}`,
-      password: hashedPass,
-      role: 'staff',
-      profile: {
-        phone: `${getRandomElement(phonePrefixes)}${getRandomInt(10000000, 99999999)}`,
-        gender: i % 2 === 0 ? 'Male' : 'Female',
-        address: `${getRandomInt(1, 999)}, ${['MG Road', 'Park Street', 'Lake View', 'Green Park', 'Sector'][getRandomInt(0, 4)]}, ${['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Ahmedabad'][getRandomInt(0, 4)]}`
-      }
-    }));
+    const departments = ['Science', 'Mathematics', 'English', 'Hindi', 'Social Studies', 'Computer Science', 'Physical Education', 'Arts', 'Administration'];
+    const designations = ['Senior Teacher', 'Junior Teacher', 'Department Head', 'Lab Assistant', 'Administrative Staff', 'Counselor', 'Librarian'];
+    const employmentTypes = ['full-time', 'full-time', 'full-time', 'full-time', 'part-time', 'contract'];
+    const staffDocs = staffNames.map((name, i) => {
+      const nameParts = name.split(' ');
+      return {
+        name,
+        firstName: nameParts[0],
+        lastName: nameParts.slice(1).join(' ') || nameParts[0],
+        email: `staff${i + 1}@edufordge.com`,
+        schoolId: `STF-2026-${(i + 1).toString().padStart(4, '0')}`,
+        password: hashedPass,
+        role: 'staff',
+        department: departments[i % departments.length],
+        designation: designations[i % designations.length],
+        employmentType: employmentTypes[i % employmentTypes.length],
+        dateOfJoining: new Date(today.getFullYear() - getRandomInt(1, 5), getRandomInt(0, 11), getRandomInt(1, 28)),
+        isActive: i < 18,
+        profile: {
+          phone: `${getRandomElement(phonePrefixes)}${getRandomInt(10000000, 99999999)}`,
+          gender: i % 2 === 0 ? 'Male' : 'Female',
+          address: `${getRandomInt(1, 999)}, ${['MG Road', 'Park Street', 'Lake View', 'Green Park', 'Sector'][getRandomInt(0, 4)]}, ${['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Ahmedabad'][getRandomInt(0, 4)]}`
+        }
+      };
+    });
     const staffUsers = await User.insertMany(staffDocs);
 
     // ── 5. PRIMARY TEST STUDENT ──
@@ -522,21 +535,37 @@ const seedData = async () => {
 
     // ── 15. SALARY SLIPS ──
     console.log('  Creating salary slips...');
-    const salaryMonths = ['April 2026', 'May 2026', 'June 2026'];
+    const salaryMonths = [
+      { label: 'April 2026', date: new Date(2026, 3, 1) },
+      { label: 'May 2026', date: new Date(2026, 4, 1) },
+      { label: 'June 2026', date: new Date(2026, 5, 1) }
+    ];
     for (const staff of staffUsers) {
-      for (const month of salaryMonths) {
-        const gross = getRandomInt(25000, 65000);
-        const deductions = Math.round(gross * (getRandomInt(5, 15) / 100));
+      for (const { label, date } of salaryMonths) {
+        const gross = getRandomInt(30000, 70000);
+        const basic = Math.round(gross * 0.5);
+        const hra = Math.round(gross * 0.2);
+        const da = Math.round(gross * 0.15);
+        const ta = Math.round(gross * 0.08);
+        const otherAllowances = gross - basic - hra - da - ta;
+        const pfDeduction = Math.round(gross * 0.12);
+        const taxDeduction = Math.round(gross * 0.05);
+        const otherDeductions = getRandomInt(0, 500);
+        const deductions = pfDeduction + taxDeduction + otherDeductions;
         const net = gross - deductions;
-        const status = month === 'June 2026' ? 'Pending' : (Math.random() > 0.2 ? 'Paid' : 'Pending');
+        const status = label === 'June 2026' ? 'Pending' : (Math.random() > 0.2 ? 'Paid' : 'Pending');
 
         await SalarySlip.create({
           staff: staff._id,
-          month,
+          month: label,
+          slipMonth: date,
           gross,
           deductions,
           net,
-          status
+          status,
+          basic, hra, da, ta, otherAllowances,
+          pfDeduction, taxDeduction, otherDeductions,
+          paymentDate: status === 'Paid' ? new Date(date.getFullYear(), date.getMonth(), getRandomInt(1, 28)) : undefined
         });
       }
     }

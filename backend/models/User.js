@@ -25,6 +25,20 @@ const UserSchema = new mongoose.Schema({
         enum: ['admin', 'staff', 'student'],
         default: 'student'
     },
+    firstName: String,
+    lastName: String,
+    department: String,
+    designation: String,
+    employmentType: {
+        type: String,
+        enum: ['full-time', 'part-time', 'contract'],
+        default: 'full-time'
+    },
+    dateOfJoining: Date,
+    isActive: {
+        type: Boolean,
+        default: true
+    },
     profile: {
         phone: String,
         dateOfBirth: Date,

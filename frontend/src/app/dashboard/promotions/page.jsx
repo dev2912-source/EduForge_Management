@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { ChevronDown, Loader2, Search, Users, X } from "lucide-react";
 
 export default function PromotionsPage() {
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+  const [token, setToken] = useState("");
+
+  useEffect(() => {
+    setToken(localStorage.getItem("token") || "");
+  }, []);
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);

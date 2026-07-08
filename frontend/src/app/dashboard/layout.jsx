@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }) {
         {
           section: "STAFF",
           items: [
-            { name: "Staff", href: "/dashboard/staff", icon: Users },
+            { name: "Staff Directory", href: "/dashboard/staff", icon: Users },
             { name: "Salary Slips", href: "/dashboard/staff/salary", icon: CircleDollarSign },
           ]
         },

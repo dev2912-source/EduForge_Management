@@ -28,79 +28,228 @@ const Attendance = require('../models/Attendance');
 const AcademicHistory = require('../models/AcademicHistory');
 
 // @route   GET /api/admin/staff-clock
-// @desc    Get staff attendance for a specific date
-// @access  Private (Admin)
+// @desc    Get staff attendance/clock status for a specific date
+// @access  Private (Admin, Staff, Teacher)
 router.get('/staff-clock', protect, async (req, res) => {
     try {
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Not authorized as an admin' });
+        if (req.user.role !== 'admin' && req.user.role !== 'staff' && req.user.role !== 'teacher') {
+            return res.status(403).json({ message: 'Not authorized' });
         }
 
         const dateString = req.query.date || new Date().toISOString().split('T')[0];
         const dateObj = new Date(dateString);
-        
-        // Setup start and end of the day for querying
         const startOfDay = new Date(dateObj);
         startOfDay.setUTCHours(0, 0, 0, 0);
         const endOfDay = new Date(dateObj);
         endOfDay.setUTCHours(23, 59, 59, 999);
 
-        const page = parseInt(req.query.page, 10) || 1;
-        const limit = parseInt(req.query.limit, 10) || 10;
-        const startIndex = (page - 1) * limit;
-        const search = req.query.search || '';
+        const { search, department, all } = req.query;
 
-        // Find all staff users matching the search query
-        const userQuery = { role: 'staff' };
+        const userQuery = { role: { $in: ['staff', 'teacher'] }, isDeleted: { $ne: true } };
         if (search) {
             userQuery.$or = [
                 { name: { $regex: search, $options: 'i' } },
                 { schoolId: { $regex: search, $options: 'i' } },
-                { 'profile.rollNumber': { $regex: search, $options: 'i' } }
             ];
         }
+        if (department) {
+            userQuery.department = department;
+        }
 
-        const total = await User.countDocuments(userQuery);
-        const staffMembers = await User.find(userQuery)
-            .select('name email schoolId role profile')
-            .skip(startIndex)
-            .limit(limit)
-            .lean();
+        let total, staffMembers;
 
-        // For each staff member, fetch their attendance for the day
+        if (all === 'true') {
+            staffMembers = await User.find(userQuery)
+                .select('name schoolId department')
+                .sort({ name: 1 })
+                .lean();
+            total = staffMembers.length;
+        } else {
+            total = await User.countDocuments(userQuery);
+            const page = parseInt(req.query.page, 10) || 1;
+            const limit = parseInt(req.query.limit, 10) || 10;
+            const startIndex = (page - 1) * limit;
+
+            staffMembers = await User.find(userQuery)
+                .select('name schoolId department')
+                .sort({ name: 1 })
+                .skip(startIndex)
+                .limit(limit)
+                .lean();
+        }
+
         const staffIds = staffMembers.map(s => s._id);
         const attendanceRecords = await Attendance.find({
             student: { $in: staffIds },
             date: { $gte: startOfDay, $lte: endOfDay }
         }).lean();
 
-        // Merge them
-        const combinedData = staffMembers.map(staff => {
+        const data = staffMembers.map(staff => {
             const record = attendanceRecords.find(a => a.student.toString() === staff._id.toString());
+            let clock_status = 'not_in';
+            let is_late = false;
+
+            if (record) {
+                const status = (record.status || '').toLowerCase();
+                if (status === 'present') clock_status = 'clocked_in';
+                else if (status === 'late') { clock_status = 'clocked_in'; is_late = true; }
+                else if (status === 'leave') clock_status = 'not_in';
+                else clock_status = 'not_in';
+            }
+
             return {
-                staff,
-                attendance: record || null
+                staff_id: staff._id,
+                name: staff.name || '',
+                staff_code: staff.schoolId || '',
+                department: staff.department || '',
+                clock_status,
+                clock_in_at: record?.createdAt || null,
+                clock_out_at: null,
+                is_late
             };
         });
 
         res.json({
             success: true,
-            count: combinedData.length,
+            data,
             total,
-            page,
-            pages: Math.ceil(total / limit),
-            data: combinedData,
             date: dateString
         });
     } catch (err) {
-        console.error(err);
+        console.error('GET /staff-clock error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/attendance/report
+// @desc    Get student attendance report with aggregation
+// @access  Private (Admin & Staff)
+router.get('/attendance/report', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const { className, section, fromDate, toDate } = req.query;
+
+        const studentQuery = { role: 'student', isDeleted: { $ne: true } };
+        if (className) studentQuery['profile.className'] = className;
+        if (section) studentQuery['profile.section'] = section;
+
+        const students = await User.find(studentQuery)
+            .select('name schoolId profile.rollNumber profile.className profile.section')
+            .sort({ name: 1 })
+            .lean();
+
+        if (!students.length) {
+            return res.json({ success: true, data: [], summary: { totalStudents: 0, averagePercentage: 0, totalPresent: 0, totalAbsent: 0 } });
+        }
+
+        const studentIds = students.map(s => s._id);
+
+        const dateFilter = {};
+        if (fromDate || toDate) {
+            if (fromDate) dateFilter.$gte = new Date(fromDate);
+            if (toDate) {
+                const end = new Date(toDate);
+                end.setUTCHours(23, 59, 59, 999);
+                dateFilter.$lte = end;
+            }
+        }
+
+        const matchStage = { student: { $in: studentIds } };
+        if (Object.keys(dateFilter).length) matchStage.date = dateFilter;
+
+        const records = await Attendance.find(matchStage).sort({ date: 1 }).lean();
+
+        const reportMap = {};
+        for (const rec of records) {
+            const sid = rec.student.toString();
+            if (!reportMap[sid]) {
+                reportMap[sid] = { totalDays: 0, present: 0, absent: 0, late: 0, leave: 0 };
+            }
+            reportMap[sid].totalDays++;
+            const s = rec.status;
+            if (s === 'Present') reportMap[sid].present++;
+            else if (s === 'Absent') reportMap[sid].absent++;
+            else if (s === 'Late') reportMap[sid].late++;
+            else if (s === 'Leave') reportMap[sid].leave++;
+        }
+
+        for (const sid of Object.keys(reportMap)) {
+            const r = reportMap[sid];
+            const presentCount = r.present + r.late;
+            const workingDays = r.present + r.absent + r.late + r.leave;
+            r.workingDays = workingDays;
+            r.percentage = workingDays > 0 ? Math.round((presentCount / workingDays) * 100) : 0;
+        }
+
+        const data = students.map(student => {
+            const report = reportMap[student._id.toString()] || { totalDays: 0, workingDays: 0, present: 0, absent: 0, late: 0, leave: 0, percentage: 0 };
+            return {
+                _id: student._id,
+                name: student.name,
+                schoolId: student.schoolId,
+                rollNumber: student.profile?.rollNumber,
+                className: student.profile?.className,
+                section: student.profile?.section,
+                ...report
+            };
+        });
+
+        const summary = {
+            totalStudents: students.length,
+            totalDays: data.reduce((s, d) => s + d.totalDays, 0),
+            totalWorkingDays: data.reduce((s, d) => s + d.workingDays, 0),
+            totalPresent: data.reduce((s, d) => s + d.present, 0),
+            totalAbsent: data.reduce((s, d) => s + d.absent, 0),
+            totalLate: data.reduce((s, d) => s + d.late, 0),
+            totalLeave: data.reduce((s, d) => s + d.leave, 0),
+            averagePercentage: data.length > 0 ? Math.round(data.reduce((s, d) => s + d.percentage, 0) / data.length) : 0
+        };
+
+        res.json({ success: true, data, summary });
+    } catch (err) {
+        console.error('Attendance report error:', err);
+        const detail = err.message || err.errmsg || err.stack || JSON.stringify(err);
+        console.error('  Detail:', detail);
+        res.status(500).json({ message: 'Server Error', detail });
+    }
+});
+
+// @route   GET /api/admin/departments
+// @desc    Get list of departments (merged from Department model, defaults, and staff records)
+// @access  Private (Admin)
+router.get('/departments', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized as an admin' });
+        }
+
+        const defaultNames = ['Science', 'Mathematics', 'English', 'Hindi', 'Social Studies', 'Computer Science', 'Physical Education', 'Arts', 'Administration'];
+
+        const modelDepts = await Department.find().sort({ name: 1 });
+        const modelNames = modelDepts.map(d => d.name);
+
+        const staffDepts = await User.distinct('department', { role: 'staff', department: { $ne: '', $exists: true } });
+
+        const allNames = [...new Set([...defaultNames, ...modelNames, ...staffDepts])].filter(Boolean).sort();
+
+        const data = allNames.map(name => {
+            const found = modelDepts.find(d => d.name === name);
+            if (found) return { _id: found._id, name: found.name, deletable: true };
+            return { name, deletable: false };
+        });
+
+        res.json({ success: true, data });
+    } catch (err) {
+        console.error('GET /departments error:', err);
         res.status(500).json({ message: 'Server Error' });
     }
 });
 
 // @route   GET /api/admin/staff
-// @desc    Get all staff members with pagination and search
-// @access  Private (Admin)
+// @desc    Get all staff with search, filters, sort, pagination
 router.get('/staff', protect, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
@@ -111,43 +260,120 @@ router.get('/staff', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search } = req.query;
-        let query = { role: 'staff' };
+        const { search, department, employmentType, status, sort_by, sort_dir } = req.query;
+        let query = { role: 'staff', isDeleted: { $ne: true } };
 
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } },
                 { schoolId: { $regex: search, $options: 'i' } }
             ];
         }
 
+        if (department) query.department = department;
+        if (employmentType) query.employmentType = employmentType;
+        if (status === 'active') query.isActive = true;
+        if (status === 'inactive') query.isActive = false;
+
+        let sortObj = { createdAt: -1 };
+        if (sort_by) {
+            const dir = sort_dir === 'asc' ? 1 : -1;
+            if (sort_by === 'firstName') sortObj = { firstName: dir, lastName: dir };
+            else if (sort_by === 'staffCode') sortObj = { schoolId: dir };
+            else if (['department', 'designation', 'employmentType', 'isActive', 'createdAt'].includes(sort_by)) sortObj = { [sort_by]: dir };
+        }
+
         const total = await User.countDocuments(query);
         const staff = await User.find(query)
-            .sort({ createdAt: -1 })
+            .sort(sortObj)
             .skip(startIndex)
             .limit(limit)
             .lean();
+
+        // Map to match frontend expectations
+        const data = staff.map(s => ({
+            id: s._id,
+            _id: s._id,
+            firstName: s.firstName || '',
+            lastName: s.lastName || '',
+            name: s.name || `${s.firstName || ''} ${s.lastName || ''}`.trim(),
+            staffCode: s.schoolId,
+            schoolId: s.schoolId,
+            email: s.email || '',
+            phone: s.profile?.phone || '',
+            gender: s.profile?.gender || '',
+            address: s.profile?.address || '',
+            dateOfBirth: s.profile?.dateOfBirth || '',
+            department: s.department || '',
+            designation: s.designation || '',
+            employmentType: s.employmentType || 'full-time',
+            dateOfJoining: s.dateOfJoining || '',
+            isActive: s.isActive !== false,
+            profilePhotoUrl: s.profile?.photoUrl || '',
+            role: s.role
+        }));
         
         res.json({
             success: true,
-            count: staff.length,
+            count: data.length,
             total,
             page,
             pages: Math.ceil(total / limit),
-            data: staff
+            data
         });
     } catch (err) {
-        console.error(err);
+        console.error('GET /staff error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/staff/:id
+// @desc    Get single staff by ID
+router.get('/staff/:id', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized as an admin' });
+        }
+        const staff = await User.findOne({ _id: req.params.id, role: 'staff', isDeleted: { $ne: true } }).lean();
+        if (!staff) return res.status(404).json({ message: 'Staff not found' });
+
+        const data = {
+            id: staff._id,
+            _id: staff._id,
+            firstName: staff.firstName || '',
+            lastName: staff.lastName || '',
+            name: staff.name || `${staff.firstName || ''} ${staff.lastName || ''}`.trim(),
+            staffCode: staff.schoolId,
+            schoolId: staff.schoolId,
+            email: staff.email || '',
+            phone: staff.profile?.phone || '',
+            gender: staff.profile?.gender || '',
+            address: staff.profile?.address || '',
+            dateOfBirth: staff.profile?.dateOfBirth || '',
+            department: staff.department || '',
+            designation: staff.designation || '',
+            employmentType: staff.employmentType || 'full-time',
+            dateOfJoining: staff.dateOfJoining || '',
+            isActive: staff.isActive !== false,
+            profilePhotoUrl: staff.profile?.photoUrl || '',
+            role: staff.role
+        };
+
+        res.json({ success: true, data });
+    } catch (err) {
+        console.error('GET /staff/:id error:', err);
         res.status(500).json({ message: 'Server Error' });
     }
 });
 
 const SalarySlip = require('../models/SalarySlip');
 
-// @route   GET /api/admin/salary
-// @desc    Get all salary slips with pagination and search
+// @route   GET /api/admin/salary-slips
+// @desc    Get all salary slips with search, filters, sort, pagination
 // @access  Private (Admin)
-router.get('/salary', protect, async (req, res) => {
+router.get('/salary-slips', protect, async (req, res) => {
     try {
         if (req.user.role !== 'admin') {
             return res.status(403).json({ message: 'Not authorized as an admin' });
@@ -157,42 +383,287 @@ router.get('/salary', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search } = req.query;
+        const { search, staff_id, month, year, payment_status, sort_by, sort_dir } = req.query;
         let query = {};
 
-        // Find users matching search first since we can't regex populate in mongoose
         if (search) {
             const matchingUsers = await User.find({
                 role: 'staff',
                 $or: [
                     { name: { $regex: search, $options: 'i' } },
+                    { firstName: { $regex: search, $options: 'i' } },
+                    { lastName: { $regex: search, $options: 'i' } },
                     { schoolId: { $regex: search, $options: 'i' } }
                 ]
-            }).select('_id');
-            const userIds = matchingUsers.map(u => u._id);
-            query = { staff: { $in: userIds } };
+            }).select('_id').lean();
+            query.staff = { $in: matchingUsers.map(u => u._id) };
         }
 
-        const total = await SalarySlip.countDocuments(query);
-        const salarySlips = await SalarySlip.find(query)
-            .populate('staff', 'name email schoolId role profile')
-            .sort({ createdAt: -1 })
-            .skip(startIndex)
-            .limit(limit)
-            .lean();
-        
+        if (staff_id) {
+            const staffFilter = { staff: staff_id };
+            query = query.staff
+                ? { $and: [{ staff: query.staff }, staffFilter] }
+                : staffFilter;
+        }
+
+        if (month) {
+            const monthStr = new Date(2024, parseInt(month) - 1).toLocaleString('en-US', { month: 'long' });
+            if (year) {
+                query.month = `${monthStr} ${year}`;
+            } else {
+                query.month = { $regex: `^${monthStr}`, $options: 'i' };
+            }
+        } else if (year) {
+            query.month = { $regex: String(year), $options: 'i' };
+        }
+
+        if (payment_status) {
+            const statusFilter = { status: payment_status.charAt(0).toUpperCase() + payment_status.slice(1).toLowerCase() };
+            query = query.month
+                ? { $and: [query, statusFilter] }
+                : statusFilter;
+        }
+
+        let sortObj = { createdAt: -1 };
+        if (sort_by) {
+            const dir = sort_dir === 'asc' ? 1 : -1;
+            if (sort_by === 'slip_month') sortObj = { slipMonth: dir };
+            else if (sort_by === 'gross_salary') sortObj = { gross: dir };
+            else if (sort_by === 'net_salary') sortObj = { net: dir };
+            else if (sort_by === 'payment_status') sortObj = { status: dir };
+            else sortObj = { [sort_by]: dir };
+        }
+
+        const [total, salarySlips] = await Promise.all([
+            SalarySlip.countDocuments(query),
+            SalarySlip.find(query)
+                .populate('staff', 'name firstName lastName email schoolId department designation profile')
+                .sort(sortObj)
+                .skip(startIndex)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const data = salarySlips.map(s => ({
+            id: s._id,
+            _id: s._id,
+            staffId: s.staff?._id,
+            staff_name: s.staff?.name || `${s.staff?.firstName || ''} ${s.staff?.lastName || ''}`.trim() || 'Unknown',
+            staff_code: s.staff?.schoolId || '',
+            department: s.staff?.department || '',
+            slip_month: s.slipMonth || s.month,
+            month: s.month,
+            gross_salary: s.gross,
+            deductions: s.deductions,
+            net_salary: s.net,
+            payment_status: s.status?.toLowerCase() || 'pending',
+            basic: s.basic || 0,
+            hra: s.hra || 0,
+            da: s.da || 0,
+            ta: s.ta || 0,
+            other_allowances: s.otherAllowances || 0,
+            pf_deduction: s.pfDeduction || 0,
+            tax_deduction: s.taxDeduction || 0,
+            other_deductions: s.otherDeductions || 0,
+            payment_date: s.paymentDate || null,
+            pdf_path: s.pdfPath || '',
+            created_at: s.createdAt
+        }));
+
         res.json({
             success: true,
-            count: salarySlips.length,
+            count: data.length,
             total,
             page,
             pages: Math.ceil(total / limit),
-            data: salarySlips
+            data
         });
     } catch (err) {
-        console.error(err);
+        console.error('GET /salary-slips error:', err);
         res.status(500).json({ message: 'Server Error' });
     }
+});
+
+// @route   GET /api/admin/salary-slips/:id
+// @desc    Get single salary slip
+router.get('/salary-slips/:id', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized as an admin' });
+        }
+        const slip = await SalarySlip.findById(req.params.id)
+            .populate('staff', 'name firstName lastName email schoolId department designation profile photoUrl')
+            .lean();
+        if (!slip) return res.status(404).json({ message: 'Salary slip not found' });
+
+        const data = {
+            id: slip._id,
+            staffId: slip.staff?._id,
+            staff_name: slip.staff?.name || `${slip.staff?.firstName || ''} ${slip.staff?.lastName || ''}`.trim() || 'Unknown',
+            staff_code: slip.staff?.schoolId || '',
+            department: slip.staff?.department || '',
+            slip_month: slip.slipMonth || slip.month,
+            month: slip.month,
+            gross_salary: slip.gross,
+            net_salary: slip.net,
+            payment_status: slip.status?.toLowerCase() || 'pending',
+            basic: slip.basic || 0,
+            hra: slip.hra || 0,
+            da: slip.da || 0,
+            ta: slip.ta || 0,
+            other_allowances: slip.otherAllowances || 0,
+            pf_deduction: slip.pfDeduction || 0,
+            tax_deduction: slip.taxDeduction || 0,
+            other_deductions: slip.otherDeductions || 0,
+            total_deductions: slip.deductions,
+            payment_date: slip.paymentDate || null,
+            pdf_path: slip.pdfPath || '',
+            created_at: slip.createdAt
+        };
+
+        res.json({ success: true, data });
+    } catch (err) {
+        console.error('GET /salary-slips/:id error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   POST /api/admin/salary-slips/generate
+// @desc    Generate salary slips for one or all staff
+router.post('/salary-slips/generate', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+        const { staff_id, month, year } = req.body;
+        if (!month) return res.status(400).json({ message: 'Month is required' });
+        if (!year) return res.status(400).json({ message: 'Year is required' });
+
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = monthNames[parseInt(month) - 1];
+        if (!monthName) return res.status(400).json({ message: 'Invalid month' });
+
+        const monthLabel = `${monthName} ${year}`;
+        const slipDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+
+        let staffMembers = [];
+        if (staff_id) {
+            const staff = await User.findOne({ _id: staff_id, role: 'staff', isDeleted: { $ne: true } }).lean();
+            if (!staff) return res.status(404).json({ message: 'Staff not found' });
+            staffMembers = [staff];
+        } else {
+            staffMembers = await User.find({ role: 'staff', isActive: true, isDeleted: { $ne: true } }).lean();
+        }
+
+        let created = 0;
+        let skipped = 0;
+
+        for (const staff of staffMembers) {
+            const existing = await SalarySlip.findOne({ staff: staff._id, month: monthLabel });
+            if (existing) { skipped++; continue; }
+
+            const gross = getRandomInt(30000, 70000);
+            const basic = Math.round(gross * 0.5);
+            const hra = Math.round(gross * 0.2);
+            const da = Math.round(gross * 0.15);
+            const ta = Math.round(gross * 0.08);
+            const otherAllowances = gross - basic - hra - da - ta;
+            const pfDeduction = Math.round(gross * 0.12);
+            const taxDeduction = Math.round(gross * 0.05);
+            const otherDeductions = Math.floor(Math.random() * 500);
+            const deductions = pfDeduction + taxDeduction + otherDeductions;
+            const net = gross - deductions;
+
+            await SalarySlip.create({
+                staff: staff._id,
+                month: monthLabel,
+                slipMonth: slipDate,
+                gross, net, deductions,
+                basic, hra, da, ta, otherAllowances,
+                pfDeduction, taxDeduction, otherDeductions,
+                status: 'Pending'
+            });
+            created++;
+        }
+
+        res.json({ success: true, data: { created, skipped } });
+    } catch (err) {
+        console.error('POST /salary-slips/generate error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// Helper: getRandomInt for salary generation (inline)
+function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// @route   PATCH /api/admin/salary-slips/:id/mark-paid
+// @desc    Mark a salary slip as paid
+router.patch('/salary-slips/:id/mark-paid', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+        const slip = await SalarySlip.findById(req.params.id);
+        if (!slip) return res.status(404).json({ message: 'Salary slip not found' });
+
+        slip.status = 'Paid';
+        slip.paymentDate = req.body.payment_date ? new Date(req.body.payment_date) : new Date();
+        await slip.save();
+
+        res.json({ success: true, data: { id: slip._id, status: 'Paid', payment_date: slip.paymentDate } });
+    } catch (err) {
+        console.error('PATCH /salary-slips/:id/mark-paid error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/salary-slips/:id/pdf
+// @desc    Get salary slip PDF URL
+router.get('/salary-slips/:id/pdf', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+        const slip = await SalarySlip.findById(req.params.id).populate('staff', 'name schoolId department').lean();
+        if (!slip) return res.status(404).json({ message: 'Salary slip not found' });
+
+        if (slip.pdfPath) {
+            return res.json({ success: true, data: { url: slip.pdfPath } });
+        }
+
+        // Generate a mock PDF path (in production, this would generate an actual PDF)
+        const pdfPath = `/pdf/salary/${slip._id}.pdf`;
+        await SalarySlip.findByIdAndUpdate(slip._id, { pdfPath });
+        res.json({ success: true, data: { url: pdfPath } });
+    } catch (err) {
+        console.error('GET /salary-slips/:id/pdf error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   POST /api/admin/salary-slips/:id/regenerate-pdf
+// @desc    Regenerate salary slip PDF
+router.post('/salary-slips/:id/regenerate-pdf', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+        const slip = await SalarySlip.findById(req.params.id);
+        if (!slip) return res.status(404).json({ message: 'Salary slip not found' });
+
+        const pdfPath = `/pdf/salary/${slip._id}.pdf`;
+        slip.pdfPath = pdfPath;
+        await slip.save();
+
+        res.json({ success: true, data: { url: pdfPath } });
+    } catch (err) {
+        console.error('POST /salary-slips/:id/regenerate-pdf error:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/salary (legacy - redirects to salary-slips)
+router.get('/salary', protect, async (req, res) => {
+    req.query = req.query;
+    res.redirect(req.originalUrl.replace('/salary', '/salary-slips'));
 });
 
 // @route   GET /api/admin/leave-requests
@@ -208,8 +679,20 @@ router.get('/leave-requests', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search } = req.query;
+        const { search, status, type, sort } = req.query;
         let query = {};
+
+        if (status) {
+            query.status = status.toLowerCase();
+        }
+
+        if (type) {
+            const userQuery = { role: type.toLowerCase() };
+            if (type === 'staff') userQuery.role = { $in: ['staff', 'teacher'] };
+            const matchingUsers = await User.find(userQuery).select('_id').lean();
+            const userIds = matchingUsers.map(u => u._id);
+            query.student = { $in: userIds };
+        }
 
         // Find users matching search first since we can't easily regex populate in mongoose
         if (search) {
@@ -219,18 +702,46 @@ router.get('/leave-requests', protect, async (req, res) => {
                     { schoolId: { $regex: search, $options: 'i' } },
                     { 'profile.rollNumber': { $regex: search, $options: 'i' } }
                 ]
-            }).select('_id');
+            }).select('_id').lean();
             const userIds = matchingUsers.map(u => u._id);
-            query = { student: { $in: userIds } };
+            const searchQuery = { student: { $in: userIds } };
+            query = query.student
+                ? { $and: [query, searchQuery] }
+                : searchQuery;
         }
 
-        const total = await LeaveRequest.countDocuments(query);
+        let sortObj = { createdAt: -1 };
+        if (sort) {
+            const [field, dir] = sort.split(':');
+            const allowed = ['createdAt', 'fromDate', 'toDate', 'status'];
+            if (allowed.includes(field)) {
+                sortObj = { [field]: dir === 'asc' ? 1 : -1 };
+            }
+        }
+
+        const [total, summary] = await Promise.all([
+            LeaveRequest.countDocuments(query),
+            LeaveRequest.aggregate([
+                {
+                    $group: {
+                        _id: { $ifNull: ['$status', 'pending'] },
+                        count: { $sum: 1 }
+                    }
+                }
+            ])
+        ]);
+
         const leaveRequests = await LeaveRequest.find(query)
             .populate('student', 'name role email schoolId')
-            .sort({ createdAt: -1 })
+            .sort(sortObj)
             .skip(startIndex)
             .limit(limit)
             .lean();
+
+        const counts = { pending: 0, approved: 0, rejected: 0 };
+        for (const s of summary) {
+            if (counts[s._id] !== undefined) counts[s._id] = s.count;
+        }
         
         res.json({
             success: true,
@@ -238,7 +749,8 @@ router.get('/leave-requests', protect, async (req, res) => {
             total,
             page,
             pages: Math.ceil(total / limit),
-            data: leaveRequests
+            data: leaveRequests,
+            summary: counts
         });
     } catch (err) {
         console.error(err);
@@ -288,8 +800,12 @@ router.get('/payments', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search } = req.query;
+        const { search, method, sort, invoice_id } = req.query;
         let query = {};
+
+        if (invoice_id) {
+            query.invoiceId = invoice_id;
+        }
         
         if (search) {
             query.$or = [
@@ -299,9 +815,23 @@ router.get('/payments', protect, async (req, res) => {
             ];
         }
 
+        if (method) {
+            const methods = method.split(',').map(m => m.trim());
+            query.method = { $in: methods };
+        }
+
+        let sortObj = { createdAt: -1 };
+        if (sort) {
+            const [field, dir] = sort.split(':');
+            const allowed = ['receiptId', 'invoiceId', 'studentName', 'amount', 'method', 'date', 'createdAt'];
+            if (allowed.includes(field)) {
+                sortObj = { [field]: dir === 'asc' ? 1 : -1 };
+            }
+        }
+
         const total = await Payment.countDocuments(query);
         const payments = await Payment.find(query)
-            .sort({ createdAt: -1 })
+            .sort(sortObj)
             .skip(startIndex)
             .limit(limit)
             .lean();
@@ -333,8 +863,12 @@ router.get('/invoices', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search } = req.query;
+        const { search, status, sort, academic_year_id } = req.query;
         let query = {};
+
+        if (academic_year_id) {
+            query.academicYear = academic_year_id;
+        }
         
         if (search) {
             query.$or = [
@@ -343,9 +877,26 @@ router.get('/invoices', protect, async (req, res) => {
             ];
         }
 
+        if (status) {
+            const statuses = status.split(',').map(s => {
+                const t = s.trim();
+                return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+            });
+            query.status = { $in: statuses };
+        }
+
+        let sortObj = { createdAt: -1 };
+        if (sort) {
+            const [field, dir] = sort.split(':');
+            const allowed = ['invoiceId', 'studentName', 'amount', 'paidAmount', 'balance', 'dueDate', 'status', 'createdAt'];
+            if (allowed.includes(field)) {
+                sortObj = { [field]: dir === 'asc' ? 1 : -1 };
+            }
+        }
+
         const total = await Invoice.countDocuments(query);
         const invoices = await Invoice.find(query)
-            .sort({ createdAt: -1 })
+            .sort(sortObj)
             .skip(startIndex)
             .limit(limit)
             .lean();
@@ -358,6 +909,50 @@ router.get('/invoices', protect, async (req, res) => {
             pages: Math.ceil(total / limit),
             data: invoices
         });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/invoices/:id
+// @desc    Get a single invoice by ID
+// @access  Private (Admin & Staff)
+router.get('/invoices/:id', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const invoice = await Invoice.findById(req.params.id).populate('student', 'name schoolId email').lean();
+        if (!invoice) {
+            return res.status(404).json({ message: 'Invoice not found' });
+        }
+
+        res.json({ success: true, data: invoice });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   GET /api/admin/academic-years
+// @desc    Get distinct academic years from invoices
+// @access  Private (Admin & Staff)
+router.get('/academic-years', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const years = await Invoice.distinct('academicYear');
+        const data = years
+            .filter(Boolean)
+            .sort()
+            .reverse()
+            .map(y => ({ id: y, label: y }));
+
+        res.json({ success: true, data });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server Error' });
@@ -449,6 +1044,36 @@ router.get('/classes', protect, async (req, res) => {
     }
 });
 
+// @route   GET /api/admin/sections
+// @desc    Get sections for a class (derive from class.sections count)
+// @access  Private (Admin & Staff)
+router.get('/sections', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const { class_id } = req.query;
+        let sections = [];
+
+        if (class_id) {
+            const cls = await ClassModel.findById(class_id).lean();
+            if (cls) {
+                const count = cls.sections || 1;
+                for (let i = 0; i < count; i++) {
+                    const letter = String.fromCharCode(65 + i);
+                    sections.push({ _id: letter, name: letter });
+                }
+            }
+        }
+
+        res.json({ success: true, data: sections });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
 // @route   GET /api/admin/classes/:id
 // @desc    Get single class with student count
 // @access  Private (Admin)
@@ -483,7 +1108,7 @@ router.get('/students', protect, async (req, res) => {
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
 
-        const { search, status, className, section, gender, sort_by, sort_dir } = req.query;
+        const { search, status, className, class_id, section, section_id, gender, sort_by, sort_dir } = req.query;
 
         let query = { role: 'student' };
 
@@ -491,7 +1116,9 @@ router.get('/students', protect, async (req, res) => {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
                 { schoolId: { $regex: search, $options: 'i' } },
-                { 'profile.rollNumber': { $regex: search, $options: 'i' } }
+                { 'profile.rollNumber': { $regex: search, $options: 'i' } },
+                { firstName: { $regex: search, $options: 'i' } },
+                { lastName: { $regex: search, $options: 'i' } }
             ];
         }
 
@@ -499,7 +1126,13 @@ router.get('/students', protect, async (req, res) => {
           const statusArr = status.split(',').map(s => s.trim().toLowerCase());
           query['profile.status'] = { $in: statusArr };
         }
-        if (className) query['profile.className'] = className;
+        if (class_id) {
+          const cls = await ClassModel.findById(class_id).select('name').lean();
+          if (cls) query['profile.className'] = cls.name;
+        } else if (className) {
+          query['profile.className'] = className;
+        }
+        if (section_id) query['profile.section'] = section_id;
         if (section) query['profile.section'] = section;
         if (gender) {
           const genderArr = gender.split(',').map(g => g.trim());
@@ -813,21 +1446,39 @@ router.post('/staff', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
 
-    const { name, email, password, ...profileFields } = req.body;
+    const { firstName, lastName, email, password, phone, gender, address, dateOfBirth, department, designation, employmentType, dateOfJoining, isActive } = req.body;
     const count = await User.countDocuments({ role: 'staff' });
     const schoolId = `STF-2026-${(count + 1).toString().padStart(4, '0')}`;
+    const fullName = `${firstName || ''} ${lastName || ''}`.trim() || `Staff ${count + 1}`;
 
     const staff = await User.create({
-      name, email: email || `staff${count + 1}@edufordge.com`,
+      name: fullName,
+      firstName: firstName || '',
+      lastName: lastName || '',
+      email: email || `staff${count + 1}@edufordge.com`,
       password: password || 'Test@123',
       role: 'staff',
       schoolId,
-      profile: profileFields
+      department: department || '',
+      designation: designation || '',
+      employmentType: employmentType || 'full-time',
+      dateOfJoining: dateOfJoining || undefined,
+      isActive: isActive !== false,
+      profile: { phone, gender, address, dateOfBirth }
     });
 
-    res.status(201).json({ success: true, data: staff });
+    res.status(201).json({
+      success: true,
+      data: {
+        id: staff._id,
+        loginId: schoolId,
+        setupLink: null,
+        emailSent: !!(email),
+        email
+      }
+    });
   } catch (err) {
-    console.error(err);
+    console.error('POST /staff error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
 });
@@ -837,18 +1488,79 @@ router.put('/staff/:id', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
 
-    const { name, email, ...profileFields } = req.body;
+    const { firstName, lastName, email, phone, gender, address, dateOfBirth, department, designation, employmentType, dateOfJoining, isActive } = req.body;
     const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (Object.keys(profileFields).length > 0) updateData.profile = profileFields;
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    const newFirstName = firstName !== undefined ? firstName : undefined;
+    const newLastName = lastName !== undefined ? lastName : undefined;
+    if (firstName !== undefined || lastName !== undefined) {
+      const existing = await User.findById(req.params.id).select('firstName lastName name').lean();
+      updateData.name = `${newFirstName || existing.firstName || ''} ${newLastName || existing.lastName || ''}`.trim();
+    }
+    if (email !== undefined) updateData.email = email;
+    if (department !== undefined) updateData.department = department;
+    if (designation !== undefined) updateData.designation = designation;
+    if (employmentType !== undefined) updateData.employmentType = employmentType;
+    if (dateOfJoining !== undefined) updateData.dateOfJoining = dateOfJoining;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (phone !== undefined || gender !== undefined || address !== undefined || dateOfBirth !== undefined) {
+      const existing = await User.findById(req.params.id).select('profile').lean();
+      updateData.profile = {
+        ...(existing?.profile || {}),
+        ...(phone !== undefined ? { phone } : {}),
+        ...(gender !== undefined ? { gender } : {}),
+        ...(address !== undefined ? { address } : {}),
+        ...(dateOfBirth !== undefined ? { dateOfBirth } : {})
+      };
+    }
 
-    const staff = await User.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    const staff = await User.findByIdAndUpdate(req.params.id, updateData, { new: true }).lean();
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
 
-    res.json({ success: true, data: staff });
+    res.json({ success: true, data: { id: staff._id } });
   } catch (err) {
-    console.error(err);
+    console.error('PUT /staff/:id error:', err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// PATCH /api/admin/staff/:id - Update staff (alias)
+router.patch('/staff/:id', protect, async (req, res) => {
+  req.body = req.body;
+  try {
+    const existing = await User.findById(req.params.id).select('firstName lastName name email department designation employmentType dateOfJoining isActive profile').lean();
+    if (!existing) return res.status(404).json({ message: 'Staff not found' });
+
+    const { firstName, lastName, email, phone, gender, address, dateOfBirth, department, designation, employmentType, dateOfJoining, isActive } = req.body;
+    const updateData = {};
+
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (firstName !== undefined || lastName !== undefined) {
+      updateData.name = `${firstName !== undefined ? firstName : existing.firstName || ''} ${lastName !== undefined ? lastName : existing.lastName || ''}`.trim();
+    }
+    if (email !== undefined) updateData.email = email;
+    if (department !== undefined) updateData.department = department;
+    if (designation !== undefined) updateData.designation = designation;
+    if (employmentType !== undefined) updateData.employmentType = employmentType;
+    if (dateOfJoining !== undefined) updateData.dateOfJoining = dateOfJoining;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    updateData.profile = {
+      ...(existing.profile || {}),
+      ...(phone !== undefined ? { phone } : {}),
+      ...(gender !== undefined ? { gender } : {}),
+      ...(address !== undefined ? { address } : {}),
+      ...(dateOfBirth !== undefined ? { dateOfBirth } : {})
+    };
+
+    const staff = await User.findByIdAndUpdate(req.params.id, updateData, { new: true }).lean();
+    if (!staff) return res.status(404).json({ message: 'Staff not found' });
+
+    res.json({ success: true, data: { id: staff._id } });
+  } catch (err) {
+    console.error('PATCH /staff/:id error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
 });
@@ -863,6 +1575,49 @@ router.delete('/staff/:id', protect, async (req, res) => {
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
 
     res.json({ success: true, message: 'Staff moved to trash' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST /api/admin/staff/:id/reset-password - Reset staff password
+router.post('/staff/:id/reset-password', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const tempPassword = Math.random().toString(36).slice(-10);
+    const staff = await User.findById(req.params.id);
+    if (!staff) return res.status(404).json({ message: 'Staff not found' });
+
+    staff.password = tempPassword;
+    await staff.save();
+
+    res.json({ success: true, data: { tempPassword } });
+  } catch (err) {
+    console.error('POST /staff/:id/reset-password error:', err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST /api/admin/staff/:id/resend-credentials - Resend staff credentials
+router.post('/staff/:id/resend-credentials', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const staff = await User.findById(req.params.id).lean();
+    if (!staff) return res.status(404).json({ message: 'Staff not found' });
+    res.json({ success: true, message: 'Credentials resent' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST /api/admin/staff/:id/photo - Upload staff photo
+router.post('/staff/:id/photo', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    res.json({ success: true, message: 'Photo upload endpoint' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server Error' });
@@ -997,6 +1752,70 @@ router.delete('/fee-structures/:id', protect, async (req, res) => {
   }
 });
 
+// POST /api/admin/invoices/generate - Auto-generate invoices from fee structures
+router.post('/invoices/generate', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const { academicYear, className } = req.body;
+
+    let feeQuery = {};
+    if (className) feeQuery.className = className;
+    if (academicYear) feeQuery.academicYear = academicYear;
+
+    const structures = await FeeStructure.find(feeQuery).lean();
+    if (!structures.length) {
+      return res.status(400).json({ success: false, message: 'No fee structures found for the given criteria' });
+    }
+
+    let studentQuery = { role: 'student', isDeleted: { $ne: true }, 'profile.status': 'active' };
+    if (className) studentQuery['profile.className'] = className;
+    if (academicYear) studentQuery['profile.academicYear'] = academicYear;
+
+    const students = await User.find(studentQuery).lean();
+    if (!students.length) {
+      return res.status(400).json({ success: false, message: 'No active students found for the given criteria' });
+    }
+
+    const existingCount = await Invoice.countDocuments();
+    let created = 0;
+    const invoices = [];
+
+    for (const student of students) {
+      for (const fs of structures) {
+        const existing = await Invoice.findOne({
+          student: student._id,
+          feeStructure: fs._id,
+          academicYear: fs.academicYear
+        });
+        if (existing) continue;
+
+        const idx = existingCount + created + invoices.length + 1;
+        const invoiceId = `INV-2026-${(idx + 3000).toString().padStart(5, '0')}`;
+        const inv = await Invoice.create({
+          invoiceId,
+          student: student._id,
+          studentName: student.name,
+          amount: `₹${fs.amount.toLocaleString('en-IN')}`,
+          paidAmount: '₹0',
+          balance: `₹${fs.amount.toLocaleString('en-IN')}`,
+          dueDate: `${fs.dueDay} ${new Date().toLocaleString('en-US', { month: 'short', year: 'numeric' })}`,
+          status: 'Pending',
+          feeStructure: fs._id,
+          academicYear: fs.academicYear
+        });
+        invoices.push(inv);
+        created++;
+      }
+    }
+
+    res.status(201).json({ success: true, created, data: invoices });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 // POST /api/admin/invoices - Create invoice
 router.post('/invoices', protect, async (req, res) => {
   try {
@@ -1077,6 +1896,21 @@ router.post('/payments', protect, async (req, res) => {
   }
 });
 
+// PUT /api/admin/payments/:id - Update payment
+router.put('/payments/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'staff') return res.status(403).json({ message: 'Not authorized' });
+
+    const payment = await Payment.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!payment) return res.status(404).json({ message: 'Payment not found' });
+
+    res.json({ success: true, data: payment });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
 // DELETE /api/admin/payments/:id - Delete payment
 router.delete('/payments/:id', protect, async (req, res) => {
   try {
@@ -1087,6 +1921,27 @@ router.delete('/payments/:id', protect, async (req, res) => {
 
     res.json({ success: true, message: 'Payment deleted' });
   } catch (err) {
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// POST /api/admin/payments/bulk-delete - Bulk delete payments
+router.post('/payments/bulk-delete', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'No IDs provided' });
+    }
+
+    const result = await Payment.deleteMany({ _id: { $in: ids } });
+
+    res.json({ success: true, deletedCount: result.deletedCount });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server Error' });
   }
 });
@@ -1212,8 +2067,12 @@ router.get('/trash', protect, async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const startIndex = (page - 1) * limit;
     const search = req.query.search || '';
+    const roleFilter = req.query.role || '';
 
     let query = { isDeleted: true };
+    if (roleFilter && ['student', 'staff', 'admin'].includes(roleFilter)) {
+      query.role = roleFilter;
+    }
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -1223,7 +2082,7 @@ router.get('/trash', protect, async (req, res) => {
 
     const total = await User.countDocuments(query);
     const items = await User.find(query)
-      .select('name schoolId role profile.className profile.rollNumber isDeleted deletedAt')
+      .select('firstName lastName name schoolId role profile.className profile.rollNumber isDeleted deletedAt')
       .sort({ deletedAt: -1 })
       .skip(startIndex)
       .limit(limit)
@@ -1474,6 +2333,243 @@ router.post('/students/bulk-graduate', protect, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// ============================================================
+// Academic Years CRUD
+// ============================================================
+
+const AcademicYear = require('../models/AcademicYear');
+const Department = require('../models/Department');
+const Subject = require('../models/Subject');
+
+// POST /api/admin/academic-years - Create academic year
+router.post('/academic-years', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const { label, start_date, end_date } = req.body;
+    if (!label || !start_date || !end_date) {
+      return res.status(400).json({ message: 'Label, start_date, and end_date are required' });
+    }
+
+    const existing = await AcademicYear.findOne({ label });
+    if (existing) return res.status(400).json({ message: 'An academic year with this label already exists' });
+
+    const academicYear = await AcademicYear.create({ label, start_date, end_date });
+    res.status(201).json({ success: true, data: academicYear });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// GET /api/admin/academic-years - List academic years
+router.get('/academic-years', protect, async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const total = await AcademicYear.countDocuments();
+    const academicYears = await AcademicYear.find()
+      .sort({ isCurrent: -1, start_date: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    res.json({
+      success: true,
+      count: academicYears.length,
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+      data: academicYears
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// GET /api/admin/academic-years/:id - Get single academic year
+router.get('/academic-years/:id', protect, async (req, res) => {
+  try {
+    const academicYear = await AcademicYear.findById(req.params.id);
+    if (!academicYear) return res.status(404).json({ message: 'Academic year not found' });
+
+    res.json({ success: true, data: academicYear });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// PATCH /api/admin/academic-years/:id/set-current - Set as current year
+router.patch('/academic-years/:id/set-current', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const academicYear = await AcademicYear.findById(req.params.id);
+    if (!academicYear) return res.status(404).json({ message: 'Academic year not found' });
+
+    await AcademicYear.updateMany({ _id: { $ne: academicYear._id } }, { isCurrent: false });
+    academicYear.isCurrent = true;
+    await academicYear.save();
+
+    res.json({ success: true, data: academicYear });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// PATCH /api/admin/academic-years/:id - Update academic year
+router.patch('/academic-years/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const { label, start_date, end_date } = req.body;
+    const updateFields = {};
+    if (label !== undefined) updateFields.label = label;
+    if (start_date !== undefined) updateFields.start_date = start_date;
+    if (end_date !== undefined) updateFields.end_date = end_date;
+
+    if (label) {
+      const duplicate = await AcademicYear.findOne({ label, _id: { $ne: req.params.id } });
+      if (duplicate) return res.status(400).json({ message: 'An academic year with this label already exists' });
+    }
+
+    const academicYear = await AcademicYear.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    );
+    if (!academicYear) return res.status(404).json({ message: 'Academic year not found' });
+
+    res.json({ success: true, data: academicYear });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// DELETE /api/admin/academic-years/:id - Delete academic year
+router.delete('/academic-years/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+
+    const academicYear = await AcademicYear.findByIdAndDelete(req.params.id);
+    if (!academicYear) return res.status(404).json({ message: 'Academic year not found' });
+
+    res.json({ success: true, message: 'Academic year deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// ============================================================
+// Department CRUD
+// ============================================================
+
+// POST /api/admin/departments - Create department
+router.post('/departments', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Department name is required' });
+    const existing = await Department.findOne({ name: name.trim() });
+    if (existing) return res.status(400).json({ message: 'Department already exists' });
+    const department = await Department.create({ name: name.trim() });
+    res.status(201).json({ success: true, data: department });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// DELETE /api/admin/departments/:id - Delete department
+router.delete('/departments/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const department = await Department.findByIdAndDelete(req.params.id);
+    if (!department) return res.status(404).json({ message: 'Department not found' });
+    res.json({ success: true, message: 'Department deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// ============================================================
+// Subjects CRUD
+// ============================================================
+
+// GET /api/admin/subjects - List subjects
+router.get('/subjects', protect, async (req, res) => {
+  try {
+    const { page = 1, limit = 100 } = req.query;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+    const total = await Subject.countDocuments();
+    const subjects = await Subject.find().sort({ name: 1 }).skip(skip).limit(limitNum);
+    res.json({ success: true, count: subjects.length, total, page: pageNum, pages: Math.ceil(total / limitNum), data: subjects });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// POST /api/admin/subjects - Create subject
+router.post('/subjects', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const { name, code } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Subject name is required' });
+    const existing = await Subject.findOne({ name: name.trim() });
+    if (existing) return res.status(400).json({ message: 'Subject already exists' });
+    const subject = await Subject.create({ name: name.trim(), code: code?.trim() || '' });
+    res.status(201).json({ success: true, data: subject });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// PUT /api/admin/subjects/:id - Update subject
+router.put('/subjects/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const { name, code } = req.body;
+    const update = {};
+    if (name?.trim()) update.name = name.trim();
+    if (code !== undefined) update.code = code.trim();
+    if (name?.trim()) {
+      const dup = await Subject.findOne({ name: name.trim(), _id: { $ne: req.params.id } });
+      if (dup) return res.status(400).json({ message: 'Subject already exists' });
+    }
+    const subject = await Subject.findByIdAndUpdate(req.params.id, { $set: update }, { new: true, runValidators: true });
+    if (!subject) return res.status(404).json({ message: 'Subject not found' });
+    res.json({ success: true, data: subject });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
+  }
+});
+
+// DELETE /api/admin/subjects/:id - Delete subject
+router.delete('/subjects/:id', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Not authorized' });
+    const subject = await Subject.findByIdAndDelete(req.params.id);
+    if (!subject) return res.status(404).json({ message: 'Subject not found' });
+    res.json({ success: true, message: 'Subject deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || 'Server Error' });
   }
 });
 

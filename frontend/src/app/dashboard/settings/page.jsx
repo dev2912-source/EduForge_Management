@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { User, Lock, ChevronDown, ChevronUp, Building2, Palette, Smartphone, LayoutTemplate, Upload, RotateCcw, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Lock, ChevronDown, ChevronUp, Building2, Palette, LayoutTemplate, Upload, RotateCcw, Save, CheckCircle, AlertCircle } from 'lucide-react';
+import AcademicYearsSection from './AcademicYearsSection';
+import SectionClassMediums from './SectionClassMediums';
+import SectionDepartments from './SectionDepartments';
+import SectionRoles from './SectionRoles';
+import SectionAttendance from './SectionAttendance';
+import SectionSalaryGrades from './SectionSalaryGrades';
+import SectionSalaryStructures from './SectionSalaryStructures';
+import SectionFeeCategories from './SectionFeeCategories';
+import SectionSubjects from './SectionSubjects';
+import SectionTimetablePeriods from './SectionTimetablePeriods';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('My Profile');
@@ -120,7 +130,6 @@ export default function SettingsPage() {
         "My Profile",
         "School Profile",
         "Branding",
-        "Android App",
         "Academic Years",
         "Class Mediums",
         "Departments",
@@ -638,28 +647,35 @@ export default function SettingsPage() {
                         </div>
                     )}
 
-                    {/* === ANDROID APP TAB === */}
-                    {activeTab === 'Android App' && (
-                        <div className="space-y-4">
-                            <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
-                                <div className="p-5 flex items-center gap-4 border-b border-stone-100">
-                                    <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center flex-shrink-0">
-                                        <Smartphone size={18} strokeWidth={2.5} />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-base font-bold text-stone-900">Branded Android App</h2>
-                                        <p className="text-[11px] font-bold text-stone-500 mt-0.5 leading-snug">Build an Android app with your school's name, icon and package - students never see "{schoolData.name}"</p>
-                                    </div>
-                                </div>
-                                <div className="p-5 flex-1 flex flex-col justify-center gap-3 bg-red-50/50">
-                                    <p className="text-[13px] font-bold text-red-700">Build failed (run 27700354988). Check the GitHub Actions log for details.</p>
-                                    <div>
-                                        <button className="px-4 py-2 rounded-lg text-[12px] font-bold bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors shadow-sm">Try again</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                    {/* === ACADEMIC YEARS TAB === */}
+                    {activeTab === 'Academic Years' && <AcademicYearsSection />}
+
+                    {/* === CLASS MEDIUMS TAB === */}
+                    {activeTab === 'Class Mediums' && <SectionClassMediums />}
+
+                    {/* === DEPARTMENTS TAB === */}
+                    {activeTab === 'Departments' && <SectionDepartments />}
+
+                    {/* === MANAGE ROLES TAB === */}
+                    {activeTab === 'Manage Roles' && <SectionRoles />}
+
+                    {/* === ATTENDANCE & SCHEDULE TAB === */}
+                    {activeTab === 'Attendance & Schedule' && <SectionAttendance />}
+
+                    {/* === SALARY GRADES TAB === */}
+                    {activeTab === 'Salary Grades' && <SectionSalaryGrades />}
+
+                    {/* === SALARY STRUCTURES TAB === */}
+                    {activeTab === 'Salary Structures' && <SectionSalaryStructures />}
+
+                    {/* === FEE CATEGORIES TAB === */}
+                    {activeTab === 'Fee Categories' && <SectionFeeCategories />}
+
+                    {/* === SUBJECTS TAB === */}
+                    {activeTab === 'Subjects' && <SectionSubjects />}
+
+                    {/* === TIMETABLE PERIODS TAB === */}
+                    {activeTab === 'Timetable Periods' && <SectionTimetablePeriods />}
 
                 </div>
             </div>

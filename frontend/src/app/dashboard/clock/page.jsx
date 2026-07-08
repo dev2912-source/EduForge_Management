@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Clock, Filter, Calendar as CalendarIcon, ChevronLeft, ChevronRight, LogIn, LogOut, AlertCircle, Loader2 } from "lucide-react";
 
 export default function MyClockPage() {
+  const [mounted, setMounted] = useState(false);
   const [history, setHistory] = useState([]);
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -11,10 +12,13 @@ export default function MyClockPage() {
   const [clockingIn, setClockingIn] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  useEffect(() => { setMounted(true); }, []);
+
   useEffect(() => {
+    if (!mounted) return;
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [mounted]);
 
   const fetchClockData = async () => {
     setLoading(true);
@@ -101,15 +105,24 @@ export default function MyClockPage() {
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-[#FF9933]"></div>
         
         <div>
-          <p className="text-[13px] font-black uppercase tracking-widest text-stone-400 mb-2">
-            {currentTime.toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-          </p>
-          <div className="text-5xl sm:text-6xl font-black text-stone-900 tracking-tighter flex items-center justify-center gap-3">
-            {currentTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })} 
-            <span className="text-2xl sm:text-3xl font-bold text-stone-400 mt-2 sm:mt-4">
-              {currentTime.getHours() >= 12 ? 'pm' : 'am'}
-            </span>
-          </div>
+          {mounted ? (
+            <>
+              <p className="text-[13px] font-black uppercase tracking-widest text-stone-400 mb-2">
+                {currentTime.toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              </p>
+              <div className="text-5xl sm:text-6xl font-black text-stone-900 tracking-tighter flex items-center justify-center gap-3">
+                {currentTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+                <span className="text-2xl sm:text-3xl font-bold text-stone-400 mt-2 sm:mt-4">
+                  {currentTime.getHours() >= 12 ? 'pm' : 'am'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <div className="h-4 w-64 rounded bg-stone-100 animate-pulse" />
+              <div className="h-12 w-48 rounded bg-stone-100 animate-pulse" />
+            </div>
+          )}
         </div>
 
         {loading ? (

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import StudentTimetable from '@/components/dashboard/StudentTimetable';
+import StaffTimetable from '@/components/dashboard/StaffTimetable';
 import AdminTimetable from '@/components/dashboard/admin/AdminTimetable';
 
 export default function TimetablePage() {
@@ -26,6 +27,9 @@ export default function TimetablePage() {
     return <AdminTimetable />;
   }
 
-  // Fallback to student timetable for 'student' and 'staff' (for now)
+  if (role === 'staff') {
+    return <StaffTimetable />;
+  }
+
   return <StudentTimetable />;
 }
