@@ -23,7 +23,7 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 const PORT = process.env.BACKEND_PORT || 5000;
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/edufordge').then(() => {
+mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/edufordge').then(() => {
     console.log('MongoDB Connected');
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }).catch(err => {
