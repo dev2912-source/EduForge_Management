@@ -89,19 +89,20 @@ export default function SettingsPage() {
                     });
                     if (res.ok) {
                         const data = await res.json();
-                        const name = data.name || (data.firstName && data.lastName ? `${data.firstName} ${data.lastName}` : data.email);
+                        const raw = data.data || data;
+                        const name = raw.name || (raw.firstName && raw.lastName ? `${raw.firstName} ${raw.lastName}` : raw.email);
                         const p = {
                             name,
-                            email: data.email,
-                            role: data.role || parsed?.role || 'student',
-                            phone: data.phone || data.mobile || '',
-                            address: data.address || '',
-                            gender: data.gender || '',
-                            dob: data.dob || data.dateOfBirth || ''
+                            email: raw.email,
+                            role: raw.role || parsed?.role || 'student',
+                            phone: raw.phone || raw.mobile || '',
+                            address: raw.address || '',
+                            gender: raw.gender || '',
+                            dob: raw.dob || raw.dateOfBirth || ''
                         };
                         setProfile(p);
                         setEditProfile({ name: p.name, phone: p.phone, address: p.address, gender: p.gender, dob: p.dob });
-                        if (data.role) setUserRole(data.role);
+                        if (raw.role) setUserRole(raw.role);
                         return;
                     }
                 } catch {}
