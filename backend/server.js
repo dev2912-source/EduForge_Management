@@ -11,6 +11,8 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/contact', require('./routes/contactRoutes'));

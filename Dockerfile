@@ -22,5 +22,7 @@ ENV NODE_ENV production
 ENV BACKEND_PORT 5000
 # Note: The PORT environment variable will be dynamically provided by Render for the frontend.
 
+EXPOSE 5000
+
 # 5. Start both servers simultaneously
 CMD ["npm", "start"]
