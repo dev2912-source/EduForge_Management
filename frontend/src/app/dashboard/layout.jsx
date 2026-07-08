@@ -166,7 +166,7 @@ export default function DashboardLayout({ children }) {
           { name: "Clock In / Out", href: "/dashboard/clock", icon: Clock },
           { name: "Leave Requests", href: "/dashboard/leave", icon: CalendarDays },
           { name: "Salary Slips", href: "/dashboard/salary", icon: FileText },
-          { name: "Settings", href: "/dashboard/settings", icon: Settings },
+          { name: "Settings", href: "/dashboard/settings/profile", icon: Settings },
         ]
       }
     ];
