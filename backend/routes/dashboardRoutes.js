@@ -118,6 +118,7 @@ const { protect } = require('../middleware/authMiddleware');
 const Attendance = require('../models/Attendance');
 const LeaveRequest = require('../models/LeaveRequest');
 const SalarySlip = require('../models/SalarySlip');
+const Timetable = require('../models/Timetable');
 
 // GET /api/dashboard/staff
 router.get('/staff', protect, async (req, res) => {
@@ -202,27 +203,105 @@ router.get('/student', protect, async (req, res) => {
     try {
         if (req.user.role !== 'student') return res.status(403).json({ message: 'Not authorized' });
 
-        const pendingLeaves = await LeaveRequest.countDocuments({
-            student: req.user._id,
-            status: 'pending'
-        });
-
+        const user = await User.findById(req.user._id).select('-password');
         const today = new Date();
         today.setUTCHours(0,0,0,0);
+
+        // Today's attendance
         const attendance = await Attendance.findOne({
             student: req.user._id,
             date: { $gte: today }
         });
 
-        const pendingInvoices = await Invoice.find({ 
-            $or: [{ student: req.user._id }, { studentName: req.user.name }],
-            status: 'Pending'
+        // Monthly attendance stats
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+        const monthRecords = await Attendance.find({
+            student: req.user._id,
+            date: { $gte: monthStart, $lte: monthEnd }
+        });
+        const totalDays = monthRecords.filter(r => !['Weekend', 'Holiday', 'Not marked'].includes(r.status)).length;
+        const presentDays = monthRecords.filter(r => r.status === 'Present').length;
+        const absentDays = monthRecords.filter(r => r.status === 'Absent').length;
+        const attendancePercentage = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
+
+        // Today's timetable
+        const className = user.profile?.className || 'Class 1';
+        const section = user.profile?.section || 'A';
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const currentDayStr = dayNames[today.getDay()];
+        const todaysClasses = await Timetable.find({ className, section, dayOfWeek: currentDayStr }).sort({ period: 1 });
+
+        // Fee summary
+        const invoices = await Invoice.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }]
+        });
+        let totalDue = 0;
+        let pendingCount = 0;
+        invoices.forEach(inv => {
+            const bal = parseInt((inv.balance || inv.amount).replace(/[₹,]/g, '')) || 0;
+            if (inv.status === 'Pending' || inv.status === 'Partial') {
+                totalDue += bal;
+                pendingCount++;
+            }
+        });
+
+        // Pending leaves count
+        const pendingLeaves = await LeaveRequest.countDocuments({
+            student: req.user._id,
+            status: 'pending'
+        });
+
+        // Recent payments
+        const recentPayments = await Payment.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }]
+        }).sort({ createdAt: -1 }).limit(5);
+
+        // Recent leaves
+        const recentLeaves = await LeaveRequest.find({ student: req.user._id })
+            .sort({ createdAt: -1 }).limit(3);
+
+        // Pending invoices (for the invoices section)
+        const pendingInvoices = await Invoice.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }],
+            status: { $in: ['Pending', 'Partial'] }
         }).sort({ createdAt: -1 }).limit(5);
 
         res.json({
-            todayClock: attendance ? (attendance.status === 'present' ? 'Present' : 'Absent') : 'Not In',
+            profile: user,
+            todayClock: attendance ? (['Present', 'Late'].includes(attendance.status) ? 'Present' : attendance.status) : 'Not In',
+            attendanceStats: {
+                totalDays,
+                presentDays,
+                absentDays,
+                percentage: attendancePercentage
+            },
+            feeSummary: { totalDue, pendingCount },
+            todaysClasses,
             pendingLeaves,
-            pendingInvoices
+            recentPayments: recentPayments.map(p => ({
+                _id: p._id,
+                receiptId: p.receiptId,
+                amount: p.amount,
+                method: p.method,
+                date: p.date || p.createdAt,
+                status: 'Paid'
+            })),
+            recentLeaves: recentLeaves.map(l => ({
+                _id: l._id,
+                fromDate: l.fromDate || l.start_date,
+                toDate: l.toDate || l.end_date,
+                reason: l.reason,
+                status: l.status
+            })),
+            pendingInvoices: pendingInvoices.map(inv => ({
+                _id: inv._id,
+                invoiceId: inv.invoiceId,
+                amount: inv.amount,
+                balance: inv.balance || inv.amount,
+                dueDate: inv.dueDate,
+                status: inv.status
+            }))
         });
     } catch (err) {
         console.error(err);
