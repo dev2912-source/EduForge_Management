@@ -7,6 +7,44 @@ const LeaveRequest = require('../models/LeaveRequest');
 const SalarySlip = require('../models/SalarySlip');
 const Timetable = require('../models/Timetable');
 const ClassModel = require('../models/Class');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const staffProfileUploadDir = path.join(__dirname, '..', 'uploads', 'staff-profiles');
+if (!fs.existsSync(staffProfileUploadDir)) {
+  fs.mkdirSync(staffProfileUploadDir, { recursive: true });
+}
+
+const staffPhotoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, staffProfileUploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `staff-${Date.now()}${ext}`);
+  }
+});
+
+const uploadStaffPhoto = multer({
+  storage: staffPhotoStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files allowed'), false);
+  }
+});
+
+// POST /api/staff/profile/photo - Upload profile photo
+router.post('/profile/photo', protect, uploadStaffPhoto.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const photoUrl = `/uploads/staff-profiles/${req.file.filename}`;
+    await User.findByIdAndUpdate(req.user._id, { 'profile.photoUrl': photoUrl });
+    res.json({ success: true, data: { photoUrl } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Upload failed' });
+  }
+});
 
 // Middleware to ensure user is staff
 const staffOnly = (req, res, next) => {
