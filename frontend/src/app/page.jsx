@@ -107,9 +107,12 @@ export default function LandingPage() {
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.6, ease: "easeInOut" }}
-            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#fdfbf9] overflow-hidden"
           >
-            {/* The background is now global, so the splash just fades its content and its own white/transparent backdrop if needed. Since the global background is already there, we don't need a solid background color here, just let the content fade out. */}
+            {/* Graph Paper Pattern Background (to match the global background while covering content) */}
+            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+            <div className="absolute top-1/4 left-1/4 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] bg-orange-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-yellow-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
             
             {/* Content Container */}
             <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-sm px-6">
