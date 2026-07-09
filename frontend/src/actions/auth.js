@@ -13,7 +13,8 @@ export async function loginUser(identifier, password) {
 
     if (res.ok) {
       // Set HttpOnly cookie for the token
-      cookies().set("token", data.token, { 
+      const cookieStore = await cookies();
+      cookieStore.set("token", data.token, { 
         httpOnly: true, 
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
@@ -21,7 +22,7 @@ export async function loginUser(identifier, password) {
       });
       
       // Set a regular cookie for the user data so the client can easily read basic info
-      cookies().set("user", JSON.stringify({
+      cookieStore.set("user", JSON.stringify({
         id: data._id, role: data.role, name: data.name, email: data.email, schoolId: data.schoolId
       }), { path: "/" });
 
@@ -35,6 +36,7 @@ export async function loginUser(identifier, password) {
 }
 
 export async function logoutUser() {
-  cookies().delete("token");
-  cookies().delete("user");
+  const cookieStore = await cookies();
+  cookieStore.delete("token");
+  cookieStore.delete("user");
 }
