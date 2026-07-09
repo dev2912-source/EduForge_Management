@@ -70,9 +70,13 @@ export default function DashboardLayout({ children }) {
       }
     };
     window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", checkAuth);
     
-    return () => window.removeEventListener("pageshow", handlePageShow);
-  }, []);
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", checkAuth);
+    };
+  }, [pathname]);
 
   const getNavItems = (role) => {
     if (role === "admin") {
