@@ -8,7 +8,6 @@ import {
   CreditCard,
   CalendarDays,
   Zap,
-  Zap,
   ChevronDown,
   BookOpen
 } from 'lucide-react';
