@@ -18,6 +18,7 @@ export default function LandingPage() {
   const yParallax = useTransform(scrollYProgress, [0, 1], [0, -150]);
   const [showSplash, setShowSplash] = useState(true);
   const [splashPhase, setSplashPhase] = useState('icon'); // 'icon' -> 'logo' -> 'exit'
+  const [isAnnual, setIsAnnual] = useState(false);
   const contactFormRef = useRef(null);
 
   useEffect(() => {
@@ -920,8 +921,8 @@ export default function LandingPage() {
                <h2 className="text-orange-400 font-bold text-[11px] uppercase tracking-[0.2em] mb-4">SIMPLE, TRANSPARENT PRICING</h2>
                <h3 className="text-4xl font-black tracking-tight text-stone-900 leading-[1.2]">Plans that grow with your school</h3>
                <div className="mt-8 inline-flex items-center bg-stone-100 rounded-full p-1 border border-stone-200">
-                  <button className="px-6 py-2 rounded-full text-sm font-bold bg-white shadow-sm text-stone-900">Monthly</button>
-                  <button className="px-6 py-2 rounded-full text-sm font-bold text-stone-500 hover:text-stone-900">Annual <span className="text-[10px] text-green-600 bg-green-100 px-2 py-0.5 rounded-full ml-1">Save 2 months</span></button>
+                  <button onClick={() => setIsAnnual(false)} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${!isAnnual ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-900'}`}>Monthly</button>
+                  <button onClick={() => setIsAnnual(true)} className={`px-6 py-2 rounded-full text-sm font-bold transition-all ${isAnnual ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-900'}`}>Annual <span className="text-[10px] text-green-600 bg-green-100 px-2 py-0.5 rounded-full ml-1">Save 2 months</span></button>
                </div>
             </div>
 
@@ -954,8 +955,8 @@ export default function LandingPage() {
                   </div>
                   <h4 className="text-xl font-black text-white mb-2">Standard</h4>
                   <div className="flex items-baseline gap-1 mb-4">
-                     <span className="text-4xl font-black text-white">₹5,000</span>
-                     <span className="text-stone-400 text-sm font-bold">/ month</span>
+                     <span className="text-4xl font-black text-white">{isAnnual ? '₹50,000' : '₹5,000'}</span>
+                     <span className="text-stone-400 text-sm font-bold">{isAnnual ? '/ year' : '/ month'}</span>
                   </div>
                   <p className="text-sm text-stone-400 font-medium mb-8 h-10">For growing schools that need more room and priority support.</p>
                   
@@ -978,8 +979,8 @@ export default function LandingPage() {
                <div className="bg-white rounded-3xl border border-stone-200 p-8 shadow-sm">
                   <h4 className="text-xl font-black text-stone-900 mb-2">Pro</h4>
                   <div className="flex items-baseline gap-1 mb-4">
-                     <span className="text-4xl font-black text-stone-900">₹20,000</span>
-                     <span className="text-stone-500 text-sm font-bold">/ month</span>
+                     <span className="text-4xl font-black text-stone-900">{isAnnual ? '₹200,000' : '₹20,000'}</span>
+                     <span className="text-stone-500 text-sm font-bold">{isAnnual ? '/ year' : '/ month'}</span>
                   </div>
                   <p className="text-sm text-stone-500 font-medium mb-8 h-10">For large schools and groups with bigger student bodies.</p>
                   
