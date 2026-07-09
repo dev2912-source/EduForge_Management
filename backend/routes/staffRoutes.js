@@ -888,7 +888,7 @@ router.put('/profile', protect, async (req, res) => {
     if (nationality) updateData['profile.nationality'] = nationality;
     if (religion) updateData['profile.religion'] = religion;
 
-    const user = await User.findByIdAndUpdate(req.user._id, updateData, { new: true }).select('-password').lean();
+    const user = await User.findByIdAndUpdate(req.user._id, updateData, { returnDocument: 'after' }).select('-password').lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const p = user.profile || {};
@@ -912,6 +912,25 @@ router.put('/profile', protect, async (req, res) => {
         photoUrl: p.photoUrl || ''
       }
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server Error' });
+  }
+});
+
+// PUT /api/staff/profile/password - Change password
+router.put('/profile/password', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!(await user.matchPassword(currentPassword))) {
+      return res.status(401).json({ message: 'Invalid current password' });
+    }
+    user.password = newPassword;
+    await user.save();
+    res.json({ message: 'Password updated successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server Error' });

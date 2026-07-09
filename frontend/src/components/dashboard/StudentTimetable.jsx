@@ -72,7 +72,7 @@ export default function StudentTimetable() {
         <table className="w-full border-collapse text-sm" style={{ minWidth: "720px" }}>
           <thead>
             <tr className="bg-white border-b border-stone-200">
-              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-400 w-[90px] sticky left-0 bg-white border-r border-stone-100"></th>
+              <th className="text-left px-3 py-3 text-xs font-semibold text-stone-400 w-[90px] sticky left-0 bg-white border-r border-stone-100 z-10"></th>
               {days.map((day, dIdx) => (
                 <th key={day} className="px-3 py-3 text-center">
                   <div className={`inline-flex flex-col items-center gap-0.5`}>
@@ -115,7 +115,7 @@ export default function StudentTimetable() {
                   className="border-b border-stone-100 hover:bg-stone-50/50 transition-colors"
                 >
                   {/* Period label */}
-                  <td className="px-3 py-2.5 sticky left-0 bg-white border-r border-stone-100">
+                  <td className="px-3 py-2.5 sticky left-0 bg-white border-r border-stone-100 z-10">
                     <p className="text-[11px] font-bold text-stone-700">{period.label}</p>
                     {period.time.split("\n").map((t, i) => (
                       <p key={i} className="text-[10px] text-stone-400 leading-tight">{t}</p>

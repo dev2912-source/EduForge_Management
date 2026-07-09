@@ -1,341 +1,381 @@
-"use client";
+'use client';
+import { useState, useEffect, useRef } from 'react';
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import {
-  User, Camera, Save, Lock, ChevronDown, ChevronUp,
-  Loader2, CheckCircle, AlertCircle
-} from "lucide-react";
-
-export default function StaffSettingsProfilePage() {
-  const router = useRouter();
-  const fileInputRef = useRef(null);
-
-  const [profile, setProfile] = useState({
-    name: "", email: "", schoolId: "", department: "", designation: "",
-    employmentType: "", dateOfJoining: null,
-    phone: "", gender: "", dateOfBirth: null, bloodGroup: "",
-    address: "", nationality: "", religion: "", photoUrl: ""
-  });
-  const [editing, setEditing] = useState({});
+export default function ProfileSettingsPage() {
+  const fileRef = useRef(null);
+  const [role, setRole] = useState('student');
+  const [profile, setProfile] = useState({});
+  const [edit, setEdit] = useState({});
+  const [parentEdit, setParentEdit] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [msg, setMsg] = useState({ type: "", text: "" });
-  const [passwordExpanded, setPasswordExpanded] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const [passwordMsg, setPasswordMsg] = useState({ type: "", text: "" });
-  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState({ current: '', newPw: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState(null);
+
+  const api = (endpoint, opts = {}) => {
+    const token = localStorage.getItem('token');
+    return fetch(`/api/${role}${endpoint}`, {
+      ...opts,
+      headers: { ...opts.headers, Authorization: `Bearer ${token}` }
+    });
+  };
 
   useEffect(() => {
+    const u = JSON.parse(localStorage.getItem('user') || '{}');
+    setRole(u.role || 'student');
+  }, []);
+
+  useEffect(() => {
+    if (!role) return;
     (async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/staff/profile", {
-          headers: { Authorization: `Bearer ${token}` }
+        const res = await api('/profile');
+        if (!res.ok) throw new Error('Failed to load');
+        const json = await res.json();
+        const u = json.data || json;
+        const pr = u.profile || u;
+        setProfile(u);
+        setEdit({
+          phone: pr.phone || '',
+          gender: pr.gender || '',
+          dateOfBirth: pr.dateOfBirth || '',
+          bloodGroup: pr.bloodGroup || '',
+          address: pr.address || '',
+          nationality: pr.nationality || '',
+          religion: pr.religion || ''
         });
-        if (!res.ok) throw new Error("Failed to load profile");
-        const data = await res.json();
-        if (data.success) {
-          setProfile(data.data);
-          setEditing({
-            name: data.data.name || "",
-            phone: data.data.phone || "",
-            gender: data.data.gender || "",
-            dateOfBirth: data.data.dateOfBirth || "",
-            bloodGroup: data.data.bloodGroup || "",
-            address: data.data.address || "",
-            nationality: data.data.nationality || "",
-            religion: data.data.religion || ""
-          });
-        }
+        setParentEdit({
+          fatherName: pr.parentDetails?.fatherName || '',
+          fatherPhone: pr.parentDetails?.fatherPhone || '',
+          motherName: pr.parentDetails?.motherName || '',
+          motherPhone: pr.parentDetails?.motherPhone || '',
+          guardianName: pr.parentDetails?.guardianName || '',
+          guardianPhone: pr.parentDetails?.guardianPhone || '',
+          annualIncome: pr.parentDetails?.annualIncome || ''
+        });
       } catch (err) {
         console.error(err);
       }
       setLoading(false);
     })();
-  }, []);
+  }, [role]);
 
   const showMsg = (type, text) => {
     setMsg({ type, text });
-    setTimeout(() => setMsg({ type: "", text: "" }), 4000);
+    setTimeout(() => setMsg(null), 4000);
   };
 
   const handleSave = async () => {
-    if (!editing.name.trim()) { showMsg("error", "Name is required"); return; }
     setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/staff/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(editing)
+      const body = role === 'student' ? {
+        ...edit,
+        parentDetails: {
+          fatherName: parentEdit.fatherName,
+          fatherPhone: parentEdit.fatherPhone,
+          motherName: parentEdit.motherName,
+          motherPhone: parentEdit.motherPhone,
+          guardianName: parentEdit.guardianName,
+          guardianPhone: parentEdit.guardianPhone,
+          annualIncome: parentEdit.annualIncome ? Number(parentEdit.annualIncome) : undefined
+        }
+      } : edit;
+
+      const res = await api('/profile/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Failed to save");
-      setProfile(prev => ({ ...prev, ...data.data }));
-      showMsg("success", "Profile saved successfully!");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to save');
+      showMsg('success', 'Profile saved successfully!');
     } catch (err) {
-      showMsg("error", err.message);
+      showMsg('error', err.message);
     }
     setSaving(false);
   };
 
-  const handlePhotoUpload = async (e) => {
+  const handlePhoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) { showMsg("error", "Only image files are allowed"); return; }
-    if (file.size > 2 * 1024 * 1024) { showMsg("error", "File must be under 2MB"); return; }
+    if (!file.type.startsWith('image/')) { showMsg('error', 'Only image files allowed'); return; }
+    if (file.size > 2 * 1024 * 1024) { showMsg('error', 'File must be under 2MB'); return; }
     setUploading(true);
     try {
-      const token = localStorage.getItem("token");
-      const formData = new FormData();
-      formData.append("photo", file);
-      const res = await fetch("/api/staff/profile/photo", {
-        method: "POST",
+      const token = localStorage.getItem('token');
+      const fd = new FormData();
+      fd.append('photo', file);
+      const res = await fetch(`/api/${role}/profile/photo`, {
+        method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-        body: formData
+        body: fd
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || "Upload failed");
-      setProfile(prev => ({ ...prev, photoUrl: data.data.photoUrl }));
-      showMsg("success", "Photo uploaded successfully!");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Upload failed');
+      setProfile(prev => ({ ...prev, profile: { ...prev.profile, photoUrl: json.data?.photoUrl } }));
+      showMsg('success', 'Photo uploaded!');
     } catch (err) {
-      showMsg("error", err.message);
+      showMsg('error', err.message);
     }
     setUploading(false);
   };
 
   const handleChangePassword = async () => {
-    setPasswordMsg({ type: "", text: "" });
-    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      setPasswordMsg({ type: "error", text: "All fields are required" });
-      return;
-    }
-    if (passwordForm.newPassword.length < 8) {
-      setPasswordMsg({ type: "error", text: "New password must be at least 8 characters" });
-      return;
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setPasswordMsg({ type: "error", text: "Passwords do not match" });
-      return;
-    }
-    setPasswordSaving(true);
+    setPwMsg(null);
+    if (!pw.current || !pw.newPw || !pw.confirm) { setPwMsg({ type: 'error', text: 'All fields required' }); return; }
+    if (pw.newPw.length < 8) { setPwMsg({ type: 'error', text: 'Min 8 characters' }); return; }
+    if (pw.newPw !== pw.confirm) { setPwMsg({ type: 'error', text: 'Passwords do not match' }); return; }
+    setPwSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/student/profile/password", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword
-        })
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/${role}/profile/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ currentPassword: pw.current, newPassword: pw.newPw })
       });
       if (res.ok) {
-        setPasswordMsg({ type: "success", text: "Password changed successfully!" });
-        setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+        setPwMsg({ type: 'success', text: 'Password changed!' });
+        setPw({ current: '', newPw: '', confirm: '' });
       } else {
         const err = await res.json().catch(() => ({}));
-        setPasswordMsg({ type: "error", text: err.message || "Failed to change password" });
+        setPwMsg({ type: 'error', text: err.message || 'Failed' });
       }
     } catch {
-      setPasswordMsg({ type: "error", text: "Network error" });
+      setPwMsg({ type: 'error', text: 'Network error' });
     }
-    setPasswordSaving(false);
+    setPwSaving(false);
   };
 
-  const MsgBanner = ({ state }) => {
-    if (!state.text) return null;
-    const bgColor = state.type === "success"
-      ? "bg-green-50 border-green-200 text-green-700"
-      : "bg-red-50 border-red-200 text-red-700";
-    const Icon = state.type === "success" ? CheckCircle : AlertCircle;
-    return (
-      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border ${state.type === "success" ? "border-green-200" : "border-red-200"} text-[13px] font-bold ${bgColor}`}>
-        <Icon size={16} /> {state.text}
-      </div>
-    );
-  };
+  const Msg = ({ s }) => s?.text ? (
+    <div className={`px-4 py-2.5 rounded-xl text-sm font-bold border ${
+      s.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'
+    }`}>
+      {s.text}
+    </div>
+  ) : null;
 
-  if (loading) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto">
-        <div className="flex items-center justify-center py-12 text-sm text-stone-400">
-          <Loader2 size={16} className="animate-spin mr-2" /> Loading...
-        </div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center py-16 text-sm text-stone-400">Loading...</div>
+  );
+
+  const p = profile.profile || profile;
+  const isStudent = role === 'student';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-black text-stone-900 tracking-tight">Settings</h1>
-        <p className="text-[13px] font-bold text-stone-500 mt-1">Manage your profile and account settings</p>
+      <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm">
+        <div className="flex items-center space-x-2">
+          <span className="w-1.5 h-5 bg-[#F97316] rounded-full" />
+          <h1 className="text-xl font-bold text-stone-900 tracking-tight">Profile Settings</h1>
+        </div>
+        <p className="text-sm text-stone-500 font-medium ml-3.5 mt-0.5">Manage your personal information and account</p>
       </div>
 
-      {msg.text && <MsgBanner state={msg} />}
+      {msg && <Msg s={msg} />}
 
-      {/* ===== Profile Photo ===== */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-6 flex flex-col sm:flex-row items-center gap-6">
+      {/* Profile Photo */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 flex items-center gap-5">
         <div className="relative">
-          <div className="w-24 h-24 rounded-full bg-stone-100 border-2 border-stone-200 overflow-hidden flex items-center justify-center">
-            {profile.photoUrl ? (
-              <img src={profile.photoUrl} alt="Profile" className="w-full h-full object-cover" />
+          <div className="w-20 h-20 rounded-full bg-stone-100 border-2 border-stone-200 overflow-hidden flex items-center justify-center">
+            {p.photoUrl ? (
+              <img src={p.photoUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <User size={36} className="text-stone-400" />
+              <svg className="w-8 h-8 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+              </svg>
             )}
           </div>
           {uploading && (
             <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
-              <Loader2 size={20} className="animate-spin text-white" />
+              <svg className="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
             </div>
           )}
         </div>
-        <div className="text-center sm:text-left">
+        <div>
           <p className="text-sm font-bold text-stone-800">{profile.name}</p>
           <p className="text-xs text-stone-500">{profile.email}</p>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="mt-3 px-4 py-2 rounded-lg text-xs font-bold bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 transition-colors flex items-center gap-1.5 mx-auto sm:mx-0"
+            className="mt-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100 transition-colors"
           >
-            <Camera size={14} /> {profile.photoUrl ? "Change Photo" : "Upload Photo"}
+            {p.photoUrl ? 'Change Photo' : 'Upload Photo'}
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+          <input ref={fileRef} type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
         </div>
       </div>
 
-      {/* ===== Personal Information ===== */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-stone-100">
-          <h2 className="text-base font-bold text-stone-900">Personal Information</h2>
+      {/* Personal Information */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-stone-100">
+          <h2 className="text-sm font-bold text-stone-900">Personal Information</h2>
         </div>
-        <div className="divide-y divide-stone-100">
+        <div className="divide-y divide-stone-50">
           {[
-            { key: "name", label: "Full Name", type: "text" },
-            { key: "email", label: "Email", type: "readonly" },
-            { key: "phone", label: "Phone", type: "text" },
-            { key: "gender", label: "Gender", type: "select", options: ["", "Male", "Female", "Other"] },
-            { key: "dateOfBirth", label: "Date of Birth", type: "date" },
-            { key: "bloodGroup", label: "Blood Group", type: "select", options: ["", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] },
-            { key: "address", label: "Address", type: "text" },
-            { key: "nationality", label: "Nationality", type: "text" },
-            { key: "religion", label: "Religion", type: "text" },
-          ].map((field, idx) => (
-            <div key={field.key} className="flex flex-col sm:flex-row sm:items-center p-4 sm:p-5 gap-2 sm:gap-0">
-              <div className="w-44 text-[11px] font-black tracking-widest text-stone-400 uppercase flex-shrink-0">{field.label}</div>
+            { key: 'name', label: 'Full Name', ro: true },
+            { key: 'email', label: 'Email', ro: true },
+            { key: 'phone', label: 'Phone' },
+            { key: 'gender', label: 'Gender', type: 'select', opts: ['', 'Male', 'Female', 'Other'] },
+            { key: 'dateOfBirth', label: 'Date of Birth', type: 'date' },
+            { key: 'bloodGroup', label: 'Blood Group', type: 'select', opts: ['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
+            { key: 'address', label: 'Address' },
+            { key: 'nationality', label: 'Nationality' },
+            { key: 'religion', label: 'Religion' },
+          ].map(f => {
+            const val = f.ro ? (f.key === 'name' ? profile.name : profile.email) : edit[f.key];
+            return (
+              <div key={f.key} className="flex flex-col sm:flex-row sm:items-center p-4 gap-1.5 sm:gap-0">
+                <div className="w-40 text-[10px] font-black uppercase tracking-widest text-stone-400 flex-shrink-0">{f.label}</div>
+                <div className="flex-1">
+                  {f.ro ? (
+                    <span className="text-sm font-medium text-stone-600">{val || '—'}</span>
+                  ) : f.type === 'select' ? (
+                    <select
+                      value={val || ''}
+                      onChange={e => setEdit({ ...edit, [f.key]: e.target.value })}
+                      className="w-full max-w-sm px-3 py-2 rounded-lg border border-stone-200 text-sm focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none bg-white"
+                    >
+                      {f.opts.map(o => <option key={o} value={o}>{o || `Select ${f.label}`}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type={f.type || 'text'}
+                      value={val || ''}
+                      onChange={e => setEdit({ ...edit, [f.key]: e.target.value })}
+                      className="w-full max-w-sm px-3 py-2 rounded-lg border border-stone-200 text-sm focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none"
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Student / Staff Details */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-stone-100">
+          <h2 className="text-sm font-bold text-stone-900">{isStudent ? 'Student Details' : 'Employment Details'}</h2>
+        </div>
+        <div className="divide-y divide-stone-50">
+          {(isStudent ? [
+            { label: 'Student ID', val: profile.schoolId },
+            { label: 'Class', val: p.className },
+            { label: 'Section', val: p.section },
+            { label: 'Roll Number', val: p.rollNumber },
+            { label: 'Academic Year', val: p.academicYear },
+            { label: 'Medium', val: p.medium },
+            { label: 'Admission Date', val: p.admissionDate ? new Date(p.admissionDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—' },
+          ] : [
+            { label: 'Staff ID', val: profile.schoolId },
+            { label: 'Department', val: profile.department || p.department },
+            { label: 'Designation', val: profile.designation || p.designation },
+            { label: 'Employment Type', val: profile.employmentType || p.employmentType },
+            { label: 'Date of Joining', val: (profile.dateOfJoining || p.dateOfJoining) ? new Date(profile.dateOfJoining || p.dateOfJoining).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—' },
+          ]).map(f => (
+            <div key={f.label} className="flex flex-col sm:flex-row sm:items-center p-4 gap-1.5 sm:gap-0">
+              <div className="w-40 text-[10px] font-black uppercase tracking-widest text-stone-400 flex-shrink-0">{f.label}</div>
               <div className="flex-1">
-                {field.type === "readonly" ? (
-                  <span className="text-[13px] font-bold text-stone-500">{profile[field.key] || "\u2014"}</span>
-                ) : field.type === "select" ? (
-                  <select
-                    value={editing[field.key] || ""}
-                    onChange={(e) => setEditing(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    className="w-full max-w-md px-3 py-2 rounded-lg border border-stone-200 text-[13px] font-bold text-stone-800 focus:outline-none focus:border-[#FF9933] focus:ring-2 focus:ring-orange-500/20 bg-white"
-                  >
-                    {field.options.map(o => (
-                      <option key={o} value={o}>{o || "Select " + field.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type}
-                    value={editing[field.key] || ""}
-                    onChange={(e) => setEditing(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    className="w-full max-w-md px-3 py-2 rounded-lg border border-stone-200 text-[13px] font-bold text-stone-800 focus:outline-none focus:border-[#FF9933] focus:ring-2 focus:ring-orange-500/20"
-                  />
-                )}
+                <span className="text-sm font-bold text-stone-800">{f.val || '—'}</span>
               </div>
             </div>
           ))}
         </div>
-        <div className="p-5 border-t border-stone-100">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2.5 rounded-lg text-[13px] font-black tracking-wide bg-[#FF9933] text-white hover:bg-[#e8841f] transition-colors flex items-center gap-2 disabled:opacity-50"
-          >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            Save Profile
-          </button>
-        </div>
       </div>
 
-      {/* ===== Employment Details (read-only) ===== */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-stone-100">
-          <h2 className="text-base font-bold text-stone-900">Employment Details</h2>
-        </div>
-        <div className="divide-y divide-stone-100">
-          {[
-            { key: "schoolId", label: "Staff ID" },
-            { key: "department", label: "Department" },
-            { key: "designation", label: "Designation" },
-            { key: "employmentType", label: "Employment Type" },
-            { key: "dateOfJoining", label: "Date of Joining", format: (v) => v ? new Date(v).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }) : "\u2014" },
-          ].map((field) => (
-            <div key={field.key} className="flex flex-col sm:flex-row sm:items-center p-4 sm:p-5 gap-2 sm:gap-0">
-              <div className="w-44 text-[11px] font-black tracking-widest text-stone-400 uppercase flex-shrink-0">{field.label}</div>
-              <div className="flex-1">
-                <span className="text-[13px] font-bold text-stone-800">
-                  {field.format ? field.format(profile[field.key]) : (profile[field.key] || "\u2014")}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ===== Change Password ===== */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        <div
-          className="p-5 flex items-center justify-between cursor-pointer hover:bg-stone-50/50"
-          onClick={() => setPasswordExpanded(!passwordExpanded)}
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-stone-100 text-stone-500 flex items-center justify-center">
-              <Lock size={18} strokeWidth={2.5} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-stone-900">Change Password</h2>
-              <p className="text-[12px] font-bold text-stone-500">Update your account password</p>
-            </div>
+      {/* Parent Details (student only) */}
+      {isStudent && (
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-stone-100">
+            <h2 className="text-sm font-bold text-stone-900">Parent / Guardian Details</h2>
           </div>
-          {passwordExpanded ? <ChevronUp size={18} className="text-stone-400" /> : <ChevronDown size={18} className="text-stone-400" />}
-        </div>
-
-        {passwordExpanded && (
-          <div className="px-5 pb-5 pt-2">
-            {passwordMsg.text && <MsgBanner state={passwordMsg} />}
-            <div className="border-t border-stone-100 pt-5 space-y-5">
-              {[
-                { key: "currentPassword", label: "Current Password", placeholder: "Enter current password" },
-                { key: "newPassword", label: "New Password", placeholder: "Minimum 8 characters" },
-                { key: "confirmPassword", label: "Confirm New Password", placeholder: "Re-enter new password" },
-              ].map((field) => (
-                <div key={field.key} className="flex flex-col gap-2">
-                  <label className="text-[11px] font-black uppercase tracking-widest text-stone-400">{field.label}</label>
+          <div className="divide-y divide-stone-50">
+            {[
+              { key: 'fatherName', label: 'Father Name' },
+              { key: 'fatherPhone', label: 'Father Phone' },
+              { key: 'motherName', label: 'Mother Name' },
+              { key: 'motherPhone', label: 'Mother Phone' },
+              { key: 'guardianName', label: 'Guardian Name' },
+              { key: 'guardianPhone', label: 'Guardian Phone' },
+              { key: 'annualIncome', label: 'Annual Income (₹)' },
+            ].map(f => (
+              <div key={f.key} className="flex flex-col sm:flex-row sm:items-center p-4 gap-1.5 sm:gap-0">
+                <div className="w-40 text-[10px] font-black uppercase tracking-widest text-stone-400 flex-shrink-0">{f.label}</div>
+                <div className="flex-1">
                   <input
-                    type="password"
-                    placeholder={field.placeholder}
-                    value={passwordForm[field.key]}
-                    onChange={(e) => setPasswordForm(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    className="w-full sm:w-2/3 px-4 py-2.5 rounded-xl border border-stone-200 text-sm font-bold text-stone-800 placeholder-stone-400 focus:outline-none focus:border-[#FF9933] focus:ring-2 focus:ring-orange-500/20"
+                    type={f.key === 'annualIncome' ? 'number' : 'text'}
+                    value={parentEdit[f.key] || ''}
+                    onChange={e => setParentEdit({ ...parentEdit, [f.key]: e.target.value })}
+                    className="w-full max-w-sm px-3 py-2 rounded-lg border border-stone-200 text-sm focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none"
+                    placeholder={f.key === 'annualIncome' ? 'Annual family income' : ''}
                   />
                 </div>
-              ))}
-              <button
-                onClick={handleChangePassword}
-                disabled={passwordSaving}
-                className="px-6 py-2.5 rounded-lg text-[13px] font-black tracking-wide bg-[#FCDDBB] text-stone-600 hover:bg-[#FBCE9A] transition-colors disabled:opacity-50"
-              >
-                {passwordSaving ? <Loader2 size={16} className="animate-spin inline mr-2" /> : null}
-                UPDATE PASSWORD
-              </button>
-            </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2.5 rounded-xl text-sm font-bold bg-stone-900 hover:bg-stone-800 text-white transition-colors disabled:opacity-50 shadow-sm"
+        >
+          {saving ? 'Saving…' : 'Save Profile'}
+        </button>
+      </div>
+
+      {/* Change Password */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        <button
+          onClick={() => setPwOpen(!pwOpen)}
+          className="w-full p-4 flex items-center justify-between hover:bg-stone-50/50 transition-colors"
+        >
+          <div className="text-left">
+            <h2 className="text-sm font-bold text-stone-900">Change Password</h2>
+            <p className="text-xs text-stone-500 mt-0.5">Update your account password</p>
+          </div>
+          <svg className={`w-4 h-4 text-stone-400 transition-transform ${pwOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {pwOpen && (
+          <div className="px-4 pb-4 pt-2 border-t border-stone-100 space-y-4">
+            {pwMsg && <Msg s={pwMsg} />}
+            {[
+              { key: 'current', label: 'Current Password' },
+              { key: 'newPw', label: 'New Password', ph: 'Min 8 characters' },
+              { key: 'confirm', label: 'Confirm New Password' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1 block">{f.label}</label>
+                <input
+                  type="password"
+                  value={pw[f.key]}
+                  onChange={e => setPw({ ...pw, [f.key]: e.target.value })}
+                  placeholder={f.ph || ''}
+                  className="w-full sm:w-2/3 px-3 py-2 rounded-lg border border-stone-200 text-sm focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none"
+                />
+              </div>
+            ))}
+            <button
+              onClick={handleChangePassword}
+              disabled={pwSaving}
+              className="px-5 py-2 rounded-lg text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors disabled:opacity-50"
+            >
+              {pwSaving ? 'Updating…' : 'Update Password'}
+            </button>
           </div>
         )}
       </div>

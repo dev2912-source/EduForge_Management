@@ -139,7 +139,7 @@ export default function DashboardLayout({ children }) {
           section: "ACADEMIC",
           items: [
             { name: "Timetable", href: "/dashboard/timetable", icon: Calendar },
-            { name: "Attendance", href: "/dashboard/attendance", icon: BarChart2 },
+            { name: "Attendance", href: "/dashboard/attendance/my-attendance", icon: BarChart2 },
             { name: "Academic History", href: "/dashboard/history", icon: BookOpen },
           ]
         },

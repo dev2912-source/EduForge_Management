@@ -1,730 +1,441 @@
-"use client";
-import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  Search, Filter, X, ChevronDown, ChevronLeft, ChevronRight,
-  Loader2, Download, Upload, Plus, Pencil, Trash2, Eye
-} from "lucide-react";
-import FilterPanel from "@/components/FilterPanel";
-import ExportMenu from "@/components/ExportMenu";
+'use client';
+import { useState, useEffect, useMemo } from 'react';
 
-const PAGE_LIMIT_KEY = "fee_payments_page_limit";
+const PAGE_LIMIT_KEY = 'student_payments_page_limit';
 
-function parseAmount(str) {
-  if (!str) return 0;
-  const num = parseInt(String(str).replace(/[^0-9.-]/g, ""), 10);
-  return isNaN(num) ? 0 : num;
+const METHOD_STYLES = {
+  cash: 'bg-green-50 text-green-700 border-green-100',
+  'bank transfer': 'bg-blue-50 text-blue-700 border-blue-100',
+  cheque: 'bg-amber-50 text-amber-700 border-amber-100',
+  online: 'bg-purple-50 text-purple-700 border-purple-100',
+  upi: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+  card: 'bg-rose-50 text-rose-700 border-rose-100'
+};
+
+function methodStyle(s) {
+  const key = (s || '').toLowerCase();
+  return METHOD_STYLES[key] || 'bg-stone-50 text-stone-600 border-stone-200';
 }
 
-function formatINR(num) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(num);
+function fmt(n) {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n || 0);
 }
 
-function formatDateTime(dateStr) {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function getMethodStyle(method) {
-  if (!method) return "bg-stone-50 text-stone-500";
-  const m = method.toLowerCase();
-  if (m === "cash") return "bg-green-50 text-green-600";
-  if (m === "bank transfer") return "bg-blue-50 text-blue-600";
-  if (m === "cheque") return "bg-amber-50 text-amber-600";
-  if (m === "online") return "bg-purple-50 text-purple-600";
-  if (m === "upi") return "bg-indigo-50 text-indigo-600";
-  if (m === "card") return "bg-rose-50 text-rose-600";
-  return "bg-stone-50 text-stone-500";
+function fmtDateTime(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-const METHOD_OPTIONS = [
-  { value: "Cash", label: "Cash" },
-  { value: "Bank Transfer", label: "Bank Transfer" },
-  { value: "Cheque", label: "Cheque" },
-  { value: "Online", label: "Online" },
+const SORT_ICON = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m0 0L5 6m3-3l3 3m0 4H5m8 0h3m-3 4H5m8 0h3" />
+  </svg>
+);
+
+const columns = [
+  { key: 'receipt_id', label: 'Receipt #', sortable: true, sm: false, md: false },
+  { key: 'invoice_id', label: 'Invoice #', sortable: true, sm: false, md: true },
+  { key: 'amount', label: 'Amount', sortable: true, sm: true, md: false },
+  { key: 'method', label: 'Method', sortable: true, sm: false, md: false },
+  { key: 'date', label: 'Date', sortable: true, sm: true, md: false },
 ];
 
-export default function PaymentsPage() {
-  const [payments, setPayments] = useState([]);
+export default function MyPaymentsPage() {
   const [loading, setLoading] = useState(true);
+  const [payments, setPayments] = useState([]);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(0);
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState([]);
-  const [selected, setSelected] = useState(new Set());
-  const [sortBy, setSortBy] = useState("createdAt");
-  const [sortDir, setSortDir] = useState("desc");
   const [limit, setLimit] = useState(() => {
-    try {
-      const saved = localStorage.getItem(PAGE_LIMIT_KEY);
-      const n = parseInt(saved, 10);
-      return [10, 25, 50, 100].includes(n) ? n : 10;
-    } catch {
-      return 10;
-    }
+    if (typeof window !== 'undefined') return Number(localStorage.getItem(PAGE_LIMIT_KEY)) || 10;
+    return 10;
   });
-  const [editModal, setEditModal] = useState(null);
-  const [recordModal, setRecordModal] = useState(false);
-  const [deleteModal, setDeleteModal] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [recordForm, setRecordForm] = useState({ studentName: "", invoiceId: "", amount: "", method: "Cash", date: "" });
-  const [recordSaving, setRecordSaving] = useState(false);
-  const [recordError, setRecordError] = useState("");
-  const debounceRef = useRef(null);
-  const mountedRef = useRef(true);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [methodFilter, setMethodFilter] = useState('');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortDir, setSortDir] = useState('desc');
+  const [showFilter, setShowFilter] = useState(false);
+  const [preview, setPreview] = useState(null);
 
-  const filterValue = (key) => {
-    const entry = filters.find((f) => f.field === key);
-    return entry?.value || "";
-  };
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const fetchData = useCallback(async () => {
+  const fetchPayments = async (p, l, m, s, sb, sd) => {
     setLoading(true);
     try {
-      const token = localStorage.getItem("token") || "";
-      const params = new URLSearchParams({ page, limit });
-      if (search.trim()) params.set("search", search.trim());
-
-      const methodVal = filterValue("payment_method");
-      if (methodVal) params.set("method", methodVal);
-
-      params.set("sort", `${sortBy}:${sortDir}`);
-
-      const res = await fetch(`/api/admin/payments?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams({
+        page: p, limit: l,
+        sort_by: sb, sort_dir: sd
       });
-      if (!res.ok) throw new Error("Failed to fetch");
-      const data = await res.json();
-      if (!mountedRef.current) return;
-      const items = Array.isArray(data) ? data : data.data || [];
-      setPayments(items);
-      setTotal(data.total || items.length);
-      setPages(data.pages || 1);
+      if (s) params.set('search', s);
+      if (m) params.set('method', m);
+
+      const res = await fetch(`/api/student/payments?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to load');
+      const json = await res.json();
+      if (Array.isArray(json)) {
+        setPayments(json.map(p => ({
+          id: p._id,
+          receipt_id: p.receiptId,
+          invoice_id: p.invoiceId,
+          amount: parseInt((p.amount || '0').replace(/[₹,]/g, '')) || 0,
+          method: p.method,
+          date: p.date,
+          created_at: p.createdAt
+        })));
+        setTotal(json.length);
+      } else {
+        const d = json.data || {};
+        setPayments(d.data || []);
+        setTotal(d.total || 0);
+      }
     } catch (err) {
       console.error(err);
-      if (mountedRef.current) setPayments([]);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      setLoading(false);
     }
-  }, [page, limit, search, filters, sortBy, sortDir]);
+  };
 
   useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+    const timer = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => { setPage(1); }, [debouncedSearch, methodFilter]);
 
   useEffect(() => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(fetchData, 350);
-    return () => clearTimeout(debounceRef.current);
-  }, [fetchData]);
+    fetchPayments(page, limit, methodFilter, debouncedSearch, sortBy, sortDir);
+  }, [page, limit, methodFilter, debouncedSearch, sortBy, sortDir]);
 
-  const handleSort = (field) => {
-    if (sortBy === field) {
-      setSortDir((d) => (d === "desc" ? "asc" : "desc"));
+  const totalCollected = useMemo(() => {
+    return payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  }, [payments]);
+
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortBy(field);
-      setSortDir("desc");
+      setSortBy(key);
+      setSortDir('desc');
     }
     setPage(1);
-  };
-
-  const hasActiveFilters = search.trim() || filters.some((f) => f.value);
-
-  const clearFilters = () => {
-    setSearch("");
-    setFilters([]);
-    setPage(1);
-  };
-
-  const handleSelectOne = (id) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selected.size === payments.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(payments.map((p) => p._id)));
-    }
   };
 
   const handleLimitChange = (newLimit) => {
     setLimit(newLimit);
     setPage(1);
-    try { localStorage.setItem(PAGE_LIMIT_KEY, String(newLimit)); } catch {}
+    localStorage.setItem(PAGE_LIMIT_KEY, String(newLimit));
   };
 
-  const handleExportCsv = () => {
-    const rows = payments.filter((p) => selected.has(p._id));
-    if (rows.length === 0) return;
-    const headers = ["Receipt #", "Student Name", "Amount", "Method", "Payment Date", "Invoice #"];
-    const csv = [
-      headers.join(","),
-      ...rows.map((r) =>
-        [
-          r.receiptId,
-          `"${r.studentName || ""}"`,
-          parseAmount(r.amount),
-          r.method || "",
-          r.date || r.createdAt || "",
-          r.invoiceId || "",
-        ].join(",")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payments-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const clearFilters = () => { setMethodFilter(''); setSearch(''); setDebouncedSearch(''); setPage(1); };
 
-  const handleExportExcel = () => {
-    const rows = payments.filter((p) => selected.has(p._id));
-    if (rows.length === 0) return;
-    const headers = ["Receipt #", "Student Name", "Amount", "Method", "Payment Date", "Invoice #"];
-    let html = "<table><thead><tr>" + headers.map((h) => `<th>${h}</th>`).join("") + "</tr></thead><tbody>";
-    rows.forEach((r) => {
-      html += "<tr>" +
-        `<td>${r.receiptId}</td>` +
-        `<td>${(r.studentName || "").replace(/</g, "&lt;")}</td>` +
-        `<td>${parseAmount(r.amount)}</td>` +
-        `<td>${r.method || ""}</td>` +
-        `<td>${r.date || r.createdAt || ""}</td>` +
-        `<td>${r.invoiceId || ""}</td>` +
-        "</tr>";
-    });
-    html += "</tbody></table>";
-    const blob = new Blob([`<html>${html}</html>`], { type: "application/vnd.ms-excel" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payments-${new Date().toISOString().split("T")[0]}.xls`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const openEditModal = (payment) => {
-    setEditModal({
-      ...payment,
-      _formAmount: parseAmount(payment.amount),
-      _formMethod: payment.method || "Cash",
-      _formDate: payment.date ? new Date(payment.date).toISOString().split("T")[0] : "",
-    });
-  };
-
-  const handleEditSave = async () => {
-    if (!editModal) return;
+  const openPreview = async (pay) => {
     try {
-      const token = localStorage.getItem("token") || "";
-      const res = await fetch(`/api/admin/payments/${editModal._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          amount: `₹${editModal._formAmount.toLocaleString("en-IN")}`,
-          method: editModal._formMethod,
-          date: editModal._formDate,
-        }),
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/student/payments/${pay.id}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error("Save failed");
-      setEditModal(null);
-      fetchData();
+      if (!res.ok) throw new Error('Receipt not available');
+      const json = await res.json();
+      setPreview({ html: json.data?.html || '', label: pay.receipt_id, filename: `Receipt-${pay.receipt_id}.html`, pay });
     } catch (err) {
-      alert(err.message);
+      console.error('Receipt not available');
     }
   };
 
-  const openRecordModal = () => {
-    setRecordForm({ studentName: "", invoiceId: "", amount: "", method: "Cash", date: new Date().toISOString().split("T")[0] });
-    setRecordError("");
-    setRecordModal(true);
-  };
-
-  const handleRecordSave = async () => {
-    setRecordSaving(true);
-    setRecordError("");
+  const downloadReceipt = async (pay) => {
     try {
-      const token = localStorage.getItem("token") || "";
-      const amount = parseInt(recordForm.amount, 10);
-      if (!amount || amount <= 0) { setRecordError("Amount must be greater than 0"); setRecordSaving(false); return; }
-      if (!recordForm.studentName.trim()) { setRecordError("Student name is required"); setRecordSaving(false); return; }
-
-      const res = await fetch("/api/admin/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          studentName: recordForm.studentName,
-          invoiceId: recordForm.invoiceId,
-          amount: `₹${amount.toLocaleString("en-IN")}`,
-          method: recordForm.method,
-          date: recordForm.date,
-        }),
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/student/payments/${pay.id}/receipt`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to record payment");
-      }
-      setRecordModal(false);
-      fetchData();
+      if (!res.ok) throw new Error('Receipt not available');
+      const json = await res.json();
+      const html = json.data?.html || '';
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Receipt-${pay.receipt_id}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
     } catch (err) {
-      setRecordError(err.message);
-    } finally {
-      setRecordSaving(false);
+      console.error('Download failed');
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteModal) return;
-    setDeleteLoading(true);
-    try {
-      const token = localStorage.getItem("token") || "";
-      const { mode, ids } = deleteModal;
-
-      if (mode === "single") {
-        await fetch(`/api/admin/payments/${ids[0]}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } else {
-        await fetch("/api/admin/payments/bulk-delete", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ ids }),
-        });
-      }
-      setDeleteModal(null);
-      setSelected(new Set());
-      fetchData();
-    } catch (err) {
-      alert("Delete failed");
-    } finally {
-      setDeleteLoading(false);
-    }
+  const modalDownload = async () => {
+    if (!preview) return;
+    const blob = new Blob([preview.html], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = preview.filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
-  const SortIcon = ({ field }) => {
-    if (sortBy !== field) return <ChevronDown size={12} className="text-stone-300" />;
-    return (
-      <ChevronDown
-        size={12}
-        className={`text-[#FF9933] transition-transform ${sortDir === "asc" ? "rotate-180" : ""}`}
-      />
-    );
-  };
+  const pages = useMemo(() => {
+    const arr = [];
+    for (let i = 1; i <= totalPages; i++) arr.push(i);
+    return arr;
+  }, [totalPages]);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto space-y-4">
+    <div className="space-y-4">
 
       {/* Header */}
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <div className="w-1 h-5 bg-[#FF9933] rounded-full"></div>
-            <h1 className="text-xl font-black text-stone-900 tracking-tight">Fee Payments</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3 rounded-2xl border border-stone-200 shadow-sm">
+        <div className="space-y-0.5">
+          <div className="flex items-center space-x-2">
+            <span className="w-1.5 h-5 bg-[#F97316] rounded-full" />
+            <h1 className="text-xl font-bold text-stone-900 tracking-tight">My Payments</h1>
           </div>
-          <p className="text-[13px] font-medium text-stone-500 ml-3">
-            <span className="text-[#FF9933] font-black">{total}</span> payments recorded
-          </p>
+          <p className="text-sm text-stone-500 font-medium ml-3.5">View your payment receipts</p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button className="flex items-center gap-1.5 px-4 py-2 text-sm font-bold rounded-xl border border-stone-200 bg-white text-stone-600 hover:bg-stone-50 hover:border-stone-300 transition-all shadow-sm">
-            <Upload size={16} strokeWidth={2} /> Import
-          </button>
-          <button
-            onClick={openRecordModal}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 text-sm font-bold transition-all shadow-sm flex-shrink-0"
-          >
-            <Plus size={16} strokeWidth={3} /> Record Payment
-          </button>
-        </div>
-      </div>
-
-      {/* Main Card */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
-
-        {/* Toolbar */}
-        <div className="px-3 py-2 border-b border-stone-100 flex items-center justify-between gap-2 bg-stone-50/30 min-h-[52px]">
-          {/* Selection info */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {selected.size > 0 && (
-              <>
-                <span className="text-xs font-bold text-stone-500">{selected.size} selected</span>
-                <div className="w-px h-4 bg-stone-200 mx-0.5" />
-                <ExportMenu onCsv={handleExportCsv} onExcel={handleExportExcel} />
-                <button
-                  onClick={() => setDeleteModal({ mode: "bulk", ids: Array.from(selected) })}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all"
-                  title="Delete selected"
-                >
-                  <Trash2 size={14} strokeWidth={2} />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Search + Filters */}
-          <div className="flex items-center gap-2">
-            <div className="relative w-full sm:w-48">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search size={14} className="text-stone-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-9 pr-4 py-1.5 bg-white border border-stone-200 rounded-lg text-[13px] font-medium text-stone-700 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933] transition-all shadow-sm"
-              />
-            </div>
-
-            <FilterPanel
-              namespace="fee-payments"
-              fields={[
-                { key: "payment_method", label: "Payment Method", type: "select", options: METHOD_OPTIONS },
-              ]}
-              onApply={(results) => {
-                setFilters(results.filter((r) => r.value && r.value !== ""));
-                setPage(1);
-              }}
-            />
-
-            {hasActiveFilters && (
-              <button onClick={clearFilters}
-                className="p-1.5 bg-white border border-stone-200 hover:bg-stone-50 rounded-lg text-stone-400 transition-colors shadow-sm flex items-center justify-center">
-                <X size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto min-h-[300px]">
-          {loading ? (
-            <div className="flex items-center justify-center h-64 text-orange-400">
-              <Loader2 className="animate-spin" size={48} />
-            </div>
-          ) : payments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-stone-500">
-              <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center mb-3">
-                <X size={20} className="text-stone-400" />
-              </div>
-              <p className="font-black text-[15px] text-stone-700">No Payments Recorded</p>
-              <p className="text-[13px] text-stone-400 mt-1">Use the Record Payment button to add a payment.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse min-w-[500px]">
-              <thead>
-                <tr className="border-b border-stone-200 bg-stone-50/50">
-                  <th className="py-3 pl-4 pr-2 font-black text-[12px] text-stone-800 whitespace-nowrap w-12">
-                    <input type="checkbox"
-                      checked={selected.size === payments.length && payments.length > 0}
-                      onChange={handleSelectAll}
-                      className="w-3.5 h-3.5 rounded border-stone-300 text-[#FF9933] focus:ring-[#FF9933]" />
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    <button onClick={() => handleSort("receiptId")} className="flex items-center gap-1 cursor-pointer hover:text-stone-900">
-                      Receipt # <SortIcon field="receiptId" />
-                    </button>
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    <button onClick={() => handleSort("studentName")} className="flex items-center gap-1 cursor-pointer hover:text-stone-900">
-                      Student Name <SortIcon field="studentName" />
-                    </button>
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap hidden sm:table-cell">Enrollment ID</th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">
-                    <button onClick={() => handleSort("amount")} className="flex items-center gap-1 cursor-pointer hover:text-stone-900 ml-auto">
-                      Amount <SortIcon field="amount" />
-                    </button>
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap hidden sm:table-cell">
-                    <button onClick={() => handleSort("method")} className="flex items-center gap-1 cursor-pointer hover:text-stone-900">
-                      Method <SortIcon field="method" />
-                    </button>
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap">
-                    <button onClick={() => handleSort("date")} className="flex items-center gap-1 cursor-pointer hover:text-stone-900">
-                      Payment Date <SortIcon field="date" />
-                    </button>
-                  </th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap hidden sm:table-cell">Invoice</th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap hidden lg:table-cell">Tags</th>
-                  <th className="py-3 px-3 font-black text-[12px] text-stone-800 whitespace-nowrap text-right">Receipt</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-50 bg-white">
-                {payments.map((p) => {
-                  const amt = parseAmount(p.amount);
-                  const methodKey = (p.method || "").toLowerCase();
-                  return (
-                    <tr key={p._id} className="hover:bg-stone-50/50 transition-colors group">
-                      <td className="py-3 pl-4 pr-2 whitespace-nowrap">
-                        <input type="checkbox"
-                          checked={selected.has(p._id)}
-                          onChange={() => handleSelectOne(p._id)}
-                          className="w-3.5 h-3.5 rounded border-stone-300 text-[#FF9933] focus:ring-[#FF9933]" />
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="font-mono font-bold text-[12px] text-stone-800">{p.receiptId || "—"}</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="text-sm font-bold text-stone-800">{p.studentName || "—"}</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap hidden sm:table-cell">
-                        <span className="text-xs font-mono font-bold text-stone-400">—</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap text-right">
-                        <span className="text-sm font-bold text-green-600">{formatINR(amt)}</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap hidden sm:table-cell">
-                        <span className={`text-xs font-bold capitalize px-2 py-0.5 rounded-full ${getMethodStyle(p.method)}`}>
-                          {(p.method || "—").replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="text-sm text-stone-500">{formatDateTime(p.date || p.createdAt)}</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap hidden sm:table-cell">
-                        {p.invoiceId ? (
-                          <span className="text-xs font-mono font-bold text-stone-400">{p.invoiceId}</span>
-                        ) : (
-                          <span className="text-stone-300">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap hidden lg:table-cell">
-                        <span className="text-stone-300">—</span>
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap text-right">
-                        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEditModal(p)}
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all"
-                            title="Edit Payment"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => setDeleteModal({ mode: "single", ids: [p._id] })}
-                            className="p-1.5 rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Footer */}
-        {!loading && payments.length > 0 && (
-          <div className="px-4 py-3 border-t border-stone-100 bg-stone-50/30 flex items-center justify-between gap-3">
-            <div className="text-xs font-bold text-stone-500 whitespace-nowrap">
-              {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of <span className="text-stone-800 font-black">{total}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-stone-400 font-medium">Per page:</span>
-                <select
-                  value={limit}
-                  onChange={(e) => handleLimitChange(parseInt(e.target.value, 10))}
-                  className="text-xs font-bold text-stone-700 bg-white border border-stone-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20"
-                >
-                  {[10, 25, 50, 100].map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-400 hover:text-[#FF9933] hover:border-[#FF9933]/30 hover:bg-[#FF9933]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                >
-                  <ChevronLeft size={16} strokeWidth={2.5} />
-                </button>
-                {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
-                  let pageNum;
-                  if (pages <= 5) pageNum = i + 1;
-                  else if (page <= 3) pageNum = i + 1;
-                  else if (page >= pages - 2) pageNum = pages - 4 + i;
-                  else pageNum = page - 2 + i;
-                  return (
-                    <button key={pageNum} onClick={() => setPage(pageNum)}
-                      className={`min-w-[32px] h-8 rounded-lg text-xs font-black transition-all ${
-                        page === pageNum
-                          ? "bg-[#FF9933] border-[#FF9933] text-white shadow-sm shadow-[#FF9933]/20"
-                          : "border border-stone-200 bg-white text-stone-600 hover:text-[#FF9933] hover:border-[#FF9933]/30 hover:bg-[#FF9933]/5"
-                      }`}>
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                  disabled={page === pages}
-                  className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-400 hover:text-[#FF9933] hover:border-[#FF9933]/30 hover:bg-[#FF9933]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                >
-                  <ChevronRight size={16} strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
+        {!loading && total > 0 && (
+          <div className="flex items-center gap-3 flex-wrap text-xs font-bold">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 border border-green-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+              Collected: {fmt(totalCollected)}
+            </span>
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+              {total} Receipt{total !== 1 ? 's' : ''}
+            </span>
           </div>
         )}
       </div>
 
-      {/* Edit Payment Modal */}
-      {editModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setEditModal(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-md border border-stone-200">
-            <div className="flex items-center space-x-2 mb-5">
-              <div className="w-1.5 h-5 bg-[#FF9933] rounded-full"></div>
-              <h3 className="text-base font-bold text-stone-900">Edit Payment</h3>
-              <span className="ml-auto text-xs font-mono text-stone-400">{editModal.receiptId}</span>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Amount Paid <span className="text-red-500">*</span></label>
-                <input type="number" value={editModal._formAmount}
-                  onChange={(e) => setEditModal({ ...editModal, _formAmount: parseInt(e.target.value) || 0 })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" min="0" required />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Payment Method <span className="text-red-500">*</span></label>
-                <select value={editModal._formMethod}
-                  onChange={(e) => setEditModal({ ...editModal, _formMethod: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]">
-                  {METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Payment Date <span className="text-red-500">*</span></label>
-                <input type="date" value={editModal._formDate}
-                  onChange={(e) => setEditModal({ ...editModal, _formDate: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" required />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-stone-100">
-              <button onClick={() => setEditModal(null)}
-                className="px-4 py-2 bg-white border border-stone-200 hover:bg-stone-50 rounded-lg text-sm font-bold text-stone-700 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleEditSave}
-                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-sm font-bold transition-colors">
-                Save
-              </button>
-            </div>
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+        {/* Toolbar */}
+        <div className="px-3 py-2 border-b border-stone-100 flex items-center gap-2">
+          <div className="flex-1" />
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search receipts…"
+              className="block rounded-lg border border-stone-200 bg-white pl-8 pr-3 py-1.5 text-xs w-44 sm:w-56 focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none transition-all"
+            />
           </div>
-        </div>
-      )}
-
-      {/* Record Payment Modal */}
-      {recordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setRecordModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-md border border-stone-200">
-            <div className="flex items-center space-x-2 mb-5">
-              <div className="w-1.5 h-5 bg-[#FF9933] rounded-full"></div>
-              <h3 className="text-base font-bold text-stone-900">Record Payment</h3>
-            </div>
-            {recordError && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 mb-4">{recordError}</div>
+          <div className="relative">
+            <button
+              onClick={() => setShowFilter(!showFilter)}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-stone-200 bg-white text-stone-600 hover:border-stone-300 transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filters
+            </button>
+            {showFilter && (
+              <div className="absolute right-0 top-full mt-1 z-20 bg-white rounded-xl border border-stone-200 shadow-lg p-3 min-w-[180px]">
+                <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Method</p>
+                {['', 'Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI', 'Card'].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => { setMethodFilter(s); setShowFilter(false); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      methodFilter === s ? 'bg-[#F97316]/10 text-[#F97316]' : 'text-stone-600 hover:bg-stone-50'
+                    }`}
+                  >
+                    {s || 'All'}
+                  </button>
+                ))}
+              </div>
             )}
-            <div className="space-y-4">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Student Name <span className="text-red-500">*</span></label>
-                <input type="text" value={recordForm.studentName}
-                  onChange={(e) => setRecordForm({ ...recordForm, studentName: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" placeholder="e.g. John Doe" required />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Invoice ID</label>
-                <input type="text" value={recordForm.invoiceId}
-                  onChange={(e) => setRecordForm({ ...recordForm, invoiceId: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" placeholder="Optional" />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Amount <span className="text-red-500">*</span></label>
-                <input type="number" value={recordForm.amount}
-                  onChange={(e) => setRecordForm({ ...recordForm, amount: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" min="1" required />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Payment Method <span className="text-red-500">*</span></label>
-                <select value={recordForm.method}
-                  onChange={(e) => setRecordForm({ ...recordForm, method: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]">
-                  {METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-black text-stone-400">Payment Date <span className="text-red-500">*</span></label>
-                <input type="date" value={recordForm.date}
-                  onChange={(e) => setRecordForm({ ...recordForm, date: e.target.value })}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF9933]/20 focus:border-[#FF9933]" required />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-stone-100">
-              <button onClick={() => setRecordModal(false)}
-                className="px-4 py-2 bg-white border border-stone-200 hover:bg-stone-50 rounded-lg text-sm font-bold text-stone-700 transition-colors">
-                Cancel
+          </div>
+          {(methodFilter || search) && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold text-stone-400 hover:text-red-500 hover:bg-red-50 border border-stone-200 transition-all"
+              title="Clear filters"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[580px]">
+            <thead>
+              <tr className="bg-white border-b border-stone-200">
+                {columns.map(col => (
+                  <th
+                    key={col.key}
+                    className={`text-left py-3 px-4 text-sm font-bold text-stone-700 ${
+                      col.sm ? 'hidden sm:table-cell' : ''
+                    } ${col.md ? 'hidden md:table-cell' : ''}`}
+                  >
+                    {col.sortable ? (
+                      <button
+                        onClick={() => handleSort(col.key)}
+                        className="flex items-center gap-1.5 group hover:text-stone-900 transition-colors"
+                      >
+                        {col.label}
+                        <span className={`transition-colors ${sortBy === col.key ? 'text-[#F97316]' : 'text-stone-300 group-hover:text-stone-500'}`}>
+                          {SORT_ICON}
+                        </span>
+                      </button>
+                    ) : col.label}
+                  </th>
+                ))}
+                <th className="text-right py-3 px-4" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-50">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-stone-400">Loading...</td>
+                </tr>
+              ) : payments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center">
+                    <p className="text-sm font-bold text-stone-700">No Payments Found</p>
+                    <p className="text-sm text-stone-400 mt-1">Your payment receipts will appear here once recorded.</p>
+                  </td>
+                </tr>
+              ) : payments.map((pay, idx) => (
+                <tr key={pay.id || idx} className="hover:bg-stone-50/50 transition-colors">
+                  <td className="py-2.5 px-4">
+                    <span className="font-mono text-xs font-bold text-stone-800">{pay.receipt_id}</span>
+                  </td>
+                  <td className="hidden md:table-cell py-2.5 px-4">
+                    <span className="font-mono text-xs text-stone-500">{pay.invoice_id || '—'}</span>
+                  </td>
+                  <td className="hidden sm:table-cell py-2.5 px-4">
+                    <span className="text-sm font-bold text-green-700">{fmt(pay.amount)}</span>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md border ${methodStyle(pay.method)}`}>
+                      {pay.method}
+                    </span>
+                  </td>
+                  <td className="hidden sm:table-cell py-2.5 px-4">
+                    <span className="text-sm text-stone-600">{fmtDate(pay.date)}</span>
+                  </td>
+                  <td className="text-right py-2.5 px-4">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => openPreview(pay)}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        title="Preview Receipt"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => downloadReceipt(pay)}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                        title="Download Receipt"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <div className="px-4 py-3 border-t border-stone-100 bg-stone-50/30 flex items-center justify-between gap-3 flex-shrink-0">
+          <span className="text-xs font-bold text-stone-500 whitespace-nowrap">
+            {total === 0 ? '0' : `${(page - 1) * limit + 1}–${Math.min(page * limit, total)}`} of <span className="text-stone-800 font-black">{total}</span>
+          </span>
+          <div className="flex items-center gap-3">
+            <select
+              value={limit}
+              onChange={e => handleLimitChange(Number(e.target.value))}
+              className="appearance-none w-20 text-left rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-800 focus:ring-2 focus:ring-[#F97316]/20 focus:border-[#F97316] outline-none cursor-pointer"
+            >
+              {[5, 10, 15, 20, 25].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-400 hover:text-[#F97316] hover:border-[#F97316]/30 hover:bg-[#F97316]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
               </button>
-              <button onClick={handleRecordSave} disabled={recordSaving}
-                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-                {recordSaving ? "Saving…" : "Save"}
+              {pages.map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`min-w-[32px] h-8 rounded-lg text-xs font-black transition-all border ${
+                    p === page
+                      ? 'bg-[#F97316] border-[#F97316] text-white shadow-sm shadow-[#F97316]/20'
+                      : 'bg-white border-stone-200 text-stone-600 hover:border-[#F97316]/30 hover:text-[#F97316]'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="p-1.5 rounded-lg border border-stone-200 bg-white text-stone-400 hover:text-[#F97316] hover:border-[#F97316]/30 hover:bg-[#F97316]/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Delete Confirmation Modal */}
-      {deleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setDeleteModal(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-sm border border-stone-200">
-            <h3 className="text-base font-bold text-stone-900 mb-2">Delete Payment{deleteModal.ids.length > 1 ? "s" : ""}</h3>
-            <p className="text-sm text-stone-600 mb-6">
-              {deleteModal.ids.length === 1
-                ? "Delete this payment? The invoice balance will be recalculated. This cannot be undone."
-                : `Permanently delete ${deleteModal.ids.length} payments? Invoice balances will be recalculated. This cannot be undone.`}
-            </p>
-            <div className="flex items-center justify-end gap-3">
-              <button onClick={() => setDeleteModal(null)}
-                className="px-4 py-2 bg-white border border-stone-200 hover:bg-stone-50 rounded-lg text-sm font-bold text-stone-700 transition-colors">
-                Cancel
-              </button>
-              <button onClick={handleDelete} disabled={deleteLoading}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold transition-colors disabled:opacity-50">
-                {deleteLoading ? "Deleting…" : deleteModal.ids.length > 1 ? "Delete All" : "Delete"}
-              </button>
+      {/* Receipt Preview Modal */}
+      {preview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setPreview(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-stone-100 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h2 className="text-sm font-bold text-stone-900">Payment Receipt</h2>
+                <p className="text-xs text-stone-500 mt-0.5">{preview.label}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={modalDownload}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold flex items-center gap-2 transition-all"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                </button>
+                <button
+                  onClick={() => setPreview(null)}
+                  className="w-8 h-8 rounded-lg hover:bg-stone-100 text-stone-400 flex items-center justify-center"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 bg-stone-50 overflow-hidden">
+              <iframe srcDoc={preview.html} className="w-full h-[80vh] border-0" title="Receipt Preview" />
             </div>
           </div>
         </div>
