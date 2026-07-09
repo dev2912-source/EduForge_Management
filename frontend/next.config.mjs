@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  turbopack: {
-    root: 'E:\\ASTNIQ-SOLUTION\\KedarKul',
-  },
   async rewrites() {
     return [
       {
