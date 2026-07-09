@@ -17,6 +17,165 @@ import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion'
 // Global variable that resets ONLY on a full page refresh
 let hasSeenSplashInSession = false;
 
+// ─── Dashboard Screenshot Slider ────────────────────────────────────────────
+const SLIDES = [
+  { src: "/Screenshot 2026-07-09 115827.png", label: "Admin Dashboard" },
+  { src: "/Screenshot 2026-07-09 115858.png", label: "Student Management" },
+  { src: "/Screenshot 2026-07-09 115946.png", label: "Fee Collection" },
+  { src: "/Screenshot 2026-07-09 120019.png", label: "Salary & Staff" },
+  { src: "/Screenshot 2026-07-09 125800.png", label: "Reports & Analytics" },
+  { src: "/Screenshot 2026-07-09 125822.png", label: "Academic Records" },
+];
+
+function DashboardSlider() {
+  const [current, setCurrent] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const intervalRef = useRef(null);
+
+  const startTimer = () => {
+    intervalRef.current = setInterval(() => {
+      setCurrent(prev => (prev + 1) % SLIDES.length);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    if (!paused) startTimer();
+    return () => clearInterval(intervalRef.current);
+  }, [paused]);
+
+  const goTo = (i) => {
+    clearInterval(intervalRef.current);
+    setCurrent(i);
+    if (!paused) startTimer();
+  };
+
+  const prev = () => goTo((current - 1 + SLIDES.length) % SLIDES.length);
+  const next = () => goTo((current + 1) % SLIDES.length);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.7, ease: "easeOut" }}
+      className="relative"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Glow backdrop */}
+      <div className="absolute -inset-4 bg-gradient-to-br from-orange-100/60 via-amber-50/40 to-transparent rounded-[2.5rem] blur-2xl pointer-events-none" />
+
+      {/* Browser chrome wrapper */}
+      <div className="relative bg-[#1e1e1e] rounded-2xl shadow-2xl shadow-stone-900/30 overflow-hidden border border-stone-700/60">
+        {/* Title bar */}
+        <div className="flex items-center gap-2 px-4 py-3 bg-[#2a2a2a] border-b border-stone-700/50">
+          <span className="w-3 h-3 rounded-full bg-[#ff5f57]"></span>
+          <span className="w-3 h-3 rounded-full bg-[#febc2e]"></span>
+          <span className="w-3 h-3 rounded-full bg-[#28c840]"></span>
+          <div className="flex-1 mx-4 bg-[#1a1a1a] rounded-md px-3 py-1 text-center text-[11px] font-semibold text-stone-400 tracking-wide truncate max-w-xs mx-auto">
+            app.edufordge.com — {SLIDES[current].label}
+          </div>
+          {/* Pause/play badge */}
+          <button
+            onClick={() => setPaused(p => !p)}
+            className="text-[10px] font-bold text-stone-500 hover:text-orange-400 transition-colors uppercase tracking-widest ml-2 flex-shrink-0"
+          >
+            {paused ? "▶ Play" : "⏸ Pause"}
+          </button>
+        </div>
+
+        {/* Slide frame */}
+        <div className="relative bg-[#111] overflow-hidden">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={current}
+              src={SLIDES[current].src}
+              alt={SLIDES[current].label}
+              initial={{ opacity: 0, x: 60 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -60 }}
+              transition={{ duration: 0.55, ease: [0.4, 0, 0.2, 1] }}
+              className="w-full h-auto block"
+            />
+          </AnimatePresence>
+
+          {/* Left arrow */}
+          <button
+            onClick={prev}
+            aria-label="Previous screenshot"
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-orange-400 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/10 z-10"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+
+          {/* Right arrow */}
+          <button
+            onClick={next}
+            aria-label="Next screenshot"
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-orange-400 text-white flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/10 z-10"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+
+          {/* Slide label overlay */}
+          <div className="absolute bottom-0 inset-x-0 h-16 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white text-[11px] font-bold uppercase tracking-widest drop-shadow-md">
+            {SLIDES[current].label}
+          </div>
+        </div>
+
+        {/* Dot indicators + progress bar */}
+        <div className="flex flex-col items-center gap-2 py-4 bg-[#2a2a2a]">
+          <div className="flex items-center gap-2">
+            {SLIDES.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                aria-label={`Go to slide ${i + 1}`}
+                className={`transition-all duration-300 rounded-full ${
+                  i === current
+                    ? 'w-6 h-2 bg-orange-400'
+                    : 'w-2 h-2 bg-stone-600 hover:bg-stone-400'
+                }`}
+              />
+            ))}
+          </div>
+          {/* Thin progress bar */}
+          {!paused && (
+            <div className="w-40 h-0.5 bg-stone-700 rounded-full overflow-hidden">
+              <motion.div
+                key={`${current}-progress`}
+                className="h-full bg-orange-400 rounded-full"
+                initial={{ width: '0%' }}
+                animate={{ width: '100%' }}
+                transition={{ duration: 3, ease: 'linear' }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Thumbnail strip */}
+      <div className="flex gap-2 mt-4 justify-center flex-wrap">
+        {SLIDES.map((slide, i) => (
+          <button
+            key={i}
+            onClick={() => goTo(i)}
+            className={`relative w-20 h-12 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+              i === current
+                ? 'border-orange-400 shadow-md shadow-orange-400/30 scale-105'
+                : 'border-stone-200 hover:border-orange-300 opacity-70 hover:opacity-100'
+            }`}
+          >
+            <img src={slide.src} alt={slide.label} className="w-full h-full object-contain bg-stone-900" />
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
   const yParallax = useTransform(scrollYProgress, [0, 1], [0, -150]);
@@ -789,41 +948,10 @@ export default function LandingPage() {
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-orange-400 font-bold text-[11px] uppercase tracking-[0.2em] mb-4">SEE IT IN ACTION</h2>
             <h3 className="text-4xl font-black tracking-tight text-stone-900 leading-[1.2]">A clean, modern dashboard<br/>your staff will love</h3>
+            <p className="mt-4 text-sm font-medium text-stone-500 leading-relaxed">Every screen is intuitive, fast, and built for daily school workflows.</p>
           </div>
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, rotateX: 10 }}
-            whileInView={{ opacity: 1, scale: 1, rotateX: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
-            className="bg-stone-50 rounded-[2rem] p-4 border border-stone-200 shadow-xl overflow-hidden flex items-center justify-center min-h-[500px]"
-            style={{ perspective: 1000 }}
-          >
-             {/* Dashboard Mockup */}
-             <div className="w-full max-w-4xl bg-white rounded-xl shadow-sm border border-stone-100 h-[400px] flex flex-col overflow-hidden">
-                <div className="h-12 border-b border-stone-100 flex items-center px-4 gap-2 bg-stone-50/50">
-                   <div className="w-3 h-3 rounded-full bg-red-400"></div><div className="w-3 h-3 rounded-full bg-amber-400"></div><div className="w-3 h-3 rounded-full bg-green-400"></div>
-                   <div className="ml-4 text-xs font-bold text-stone-400 bg-white px-3 py-1 rounded-md border border-stone-200">Student Profile — complete records in one place</div>
-                </div>
-                <div className="flex-1 p-6 flex gap-6 bg-stone-50/30">
-                   <div className="w-48 bg-white border border-stone-100 rounded-lg p-4 flex flex-col gap-3">
-                      <div className="w-16 h-16 rounded-full bg-stone-100 mx-auto mb-2"></div>
-                      <div className="h-4 bg-stone-200 rounded-full w-3/4 mx-auto"></div>
-                      <div className="h-3 bg-stone-100 rounded-full w-1/2 mx-auto mb-4"></div>
-                      <div className="h-8 bg-orange-50 rounded-md w-full"></div>
-                      <div className="h-8 bg-stone-50 rounded-md w-full"></div>
-                      <div className="h-8 bg-stone-50 rounded-md w-full"></div>
-                   </div>
-                   <div className="flex-1 flex flex-col gap-4">
-                      <div className="grid grid-cols-3 gap-4">
-                         <div className="h-24 bg-white border border-stone-100 rounded-lg shadow-sm"></div>
-                         <div className="h-24 bg-white border border-stone-100 rounded-lg shadow-sm"></div>
-                         <div className="h-24 bg-white border border-stone-100 rounded-lg shadow-sm"></div>
-                      </div>
-                      <div className="flex-1 bg-white border border-stone-100 rounded-lg shadow-sm"></div>
-                   </div>
-                </div>
-             </div>
-          </motion.div>
+
+          <DashboardSlider />
         </div>
       </section>
 
