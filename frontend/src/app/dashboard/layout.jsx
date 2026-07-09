@@ -28,11 +28,12 @@ import {
 import AddMenu from "@/components/layout/AddMenu";
 import NotificationPanel from "@/components/layout/NotificationPanel";
 import ProfileDropdown from "@/components/layout/ProfileDropdown";
+import { logoutUser } from "@/actions/auth";
 
 export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userRole, setUserRole] = useState("student");
   const [userName, setUserName] = useState("");
@@ -53,10 +54,8 @@ export default function DashboardLayout({ children }) {
       } catch (e) {
         console.error(e);
       }
-    } else {
-      router.push("/login");
     }
-  }, [router]);
+  }, []);
 
   const getNavItems = (role) => {
     if (role === "admin") {
@@ -174,93 +173,74 @@ export default function DashboardLayout({ children }) {
 
   const navSections = getNavItems(userRole);
 
+  const isExpanded = sidebarOpen || mobileMenuOpen;
+
   return (
-    <div className="min-h-screen bg-stone-50 flex overflow-hidden font-sans selection:bg-orange-400/20 selection:text-orange-500">
+    <div className="h-screen bg-stone-50 flex overflow-hidden font-sans selection:bg-orange-400/20 selection:text-orange-500 relative">
       
-      {/* Mobile Sidebar Overlay */}
+      {/* Floating Background Shapes */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] max-w-[800px] max-h-[800px] rounded-full bg-orange-400/20 blur-[120px] pointer-events-none mix-blend-multiply animate-pulse" style={{ animationDuration: '8s' }}></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[70vw] h-[70vw] max-w-[900px] max-h-[900px] rounded-full bg-orange-300/20 blur-[140px] pointer-events-none mix-blend-multiply animate-pulse" style={{ animationDuration: '12s', animationDelay: '2s' }}></div>
+      <div className="absolute top-[20%] right-[20%] w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] rounded-full bg-stone-200/50 blur-[100px] pointer-events-none mix-blend-multiply"></div>
+
+        {/* Mobile Sidebar Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-stone-900/30 z-40 lg:hidden backdrop-blur-sm transition-opacity duration-300"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside 
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-[220px] bg-white border-r border-stone-200 transform transition-transform duration-300 ease-in-out flex flex-col ${
-          mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        } ${!sidebarOpen ? "lg:w-16" : "lg:w-[220px]"}`}
+        onMouseEnter={() => {
+          if (window.innerWidth >= 1024) setSidebarOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (window.innerWidth >= 1024) setSidebarOpen(false);
+        }}
+        className={`fixed lg:static inset-y-0 left-0 z-50 bg-white/95 backdrop-blur-xl border-r border-stone-200/60 lg:m-4 lg:rounded-3xl lg:shadow-[0_8px_30px_rgb(0,0,0,0.06)] lg:border lg:border-stone-200/60 transform transition-all duration-300 ease-in-out flex flex-col lg:h-[calc(100vh-32px)] overflow-hidden ${
+          mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
+        } ${!sidebarOpen ? "w-[260px] lg:w-[80px]" : "w-[260px] lg:w-[260px]"}`}
       >
-        <div className="h-14 flex items-center justify-between px-3 border-b border-stone-200 flex-shrink-0">
-          <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-            <div className="w-7 h-7 bg-white rounded-md flex items-center justify-center flex-shrink-0">
-              <img src="/logo-main.png" alt="EduFordge Logo" className="h-full w-auto object-contain" />
+        <div className="h-16 flex items-center px-6 border-b border-stone-100 flex-shrink-0 transition-all duration-300">
+          <Link href="/dashboard" className="flex items-center overflow-hidden whitespace-nowrap">
+            <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+              <img src="/logo-main.png" alt="Logo" className="h-full w-auto object-contain" />
             </div>
-            {sidebarOpen && (
-              <div className="flex flex-col">
-                <span className="font-black text-[15px] tracking-tight text-stone-900 leading-none">EduFordge P...</span>
-                <span className="text-[11px] font-medium text-stone-400 mt-0.5">School Ecosystem</span>
-              </div>
-            )}
+            <div className={`flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-w-[200px] opacity-100 ml-3' : 'max-w-0 opacity-0 ml-0'}`}>
+              <span className="font-black text-[15px] tracking-tight text-stone-900 leading-none">EduFordge</span>
+              <span className="text-[10px] font-bold text-orange-500 mt-0.5 tracking-wider uppercase">Workspace</span>
+            </div>
           </Link>
-          {sidebarOpen && (
-            <button 
-              className="hidden lg:flex text-stone-300 hover:text-stone-600 transition-colors"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <ChevronsLeft size={15} strokeWidth={2.5} />
-            </button>
-          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-3 no-scrollbar">
-          {!sidebarOpen && (
-            <button 
-              className="hidden lg:flex items-center justify-center w-full p-2 mb-1 text-stone-400 hover:text-[#d97706] hover:bg-orange-50 rounded-lg transition-all"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu size={16} />
-            </button>
-          )}
-          
+        <div className="flex-1 overflow-y-auto py-4 px-4 flex flex-col gap-2 no-scrollbar">
           {navSections.slice(0, -1).map((section, idx) => (
-            <div key={idx} className="flex flex-col gap-0.5">
-              {section.section && sidebarOpen && (
-                <div className="text-[11px] font-black text-stone-400 uppercase tracking-[0.12em] mb-1 px-2 mt-1">
+            <div key={idx} className="flex flex-col gap-1">
+              {section.section && (
+                <div className={`text-[10px] font-black text-stone-400 uppercase tracking-[0.15em] px-3 whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-10 opacity-100 mt-2 mb-1.5' : 'max-h-0 opacity-0 mt-0 mb-0'}`}>
                   {section.section}
                 </div>
               )}
               {section.items.map((item) => {
                 const isActive = pathname === item.href;
-                
-                // Dashboard active styling
-                if (item.name === "Dashboard" && isActive && sidebarOpen) {
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className="flex items-center gap-2.5 py-2 pl-2.5 pr-3 bg-[#FFEDD5] text-[#C2410C] rounded-r-lg border-l-[3px] border-[#F97316] font-bold transition-all"
-                    >
-                      <item.icon size={18} strokeWidth={2.5} className="flex-shrink-0 text-[#C2410C]" />
-                      <span className="text-sm">{item.name}</span>
-                    </Link>
-                  );
-                }
-
-                // Regular items
                 return (
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all group ${
+                    className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
                       isActive 
-                        ? "bg-[#F5F1E6] text-[#1F2937] font-semibold" 
-                        : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 font-medium"
+                        ? "bg-gradient-to-r from-orange-50 to-orange-100/50 text-orange-600 shadow-sm" 
+                        : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                     }`}
-                    title={!sidebarOpen ? item.name : ""}
+                    title={!isExpanded ? item.name : ""}
                   >
-                    <item.icon size={18} className={`flex-shrink-0 ${isActive ? "text-stone-800" : "text-stone-500 group-hover:text-stone-900"}`} strokeWidth={1.75} />
-                    {sidebarOpen && <span className="text-sm">{item.name}</span>}
+                    <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 bg-orange-500 rounded-r-full transition-all duration-300 ease-in-out ${isActive && isExpanded ? 'h-5 opacity-100' : 'h-0 opacity-0'}`} />
+                    <div className="w-6 flex items-center justify-center flex-shrink-0">
+                      <item.icon size={18} className={`transition-colors duration-200 ${isActive ? "text-orange-500" : "text-stone-400 group-hover:text-stone-600"}`} strokeWidth={isActive ? 2.5 : 2} />
+                    </div>
+                    <span className={`text-sm whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-w-[200px] opacity-100 ml-3' : 'max-w-0 opacity-0 ml-0'} ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
                   </Link>
                 );
               })}
@@ -268,52 +248,52 @@ export default function DashboardLayout({ children }) {
           ))}
         </div>
 
-        <div className="px-3 py-3 border-t border-stone-200 flex flex-col gap-1 bg-white">
+        <div className="px-4 py-4 border-t border-stone-200/60 flex flex-col gap-1 bg-transparent flex-shrink-0">
           {navSections[navSections.length - 1].items.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-2.5 px-2.5 py-2 w-full rounded-lg transition-all group ${
+                className={`flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 group relative ${
                   isActive 
-                    ? "bg-[#F5F1E6] text-[#1F2937] font-semibold" 
-                    : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 font-medium"
+                    ? "bg-gradient-to-r from-orange-50 to-orange-100/50 text-orange-600 shadow-sm" 
+                    : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"
                 }`}
-                title={!sidebarOpen ? item.name : ""}
+                title={!isExpanded ? item.name : ""}
               >
-                <item.icon size={18} className={`flex-shrink-0 ${isActive ? "text-stone-800" : "text-stone-500 group-hover:text-stone-900"}`} strokeWidth={1.75} />
-                {sidebarOpen && <span className="text-sm">{item.name}</span>}
+                <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 bg-orange-500 rounded-r-full transition-all duration-300 ease-in-out ${isActive && isExpanded ? 'h-5 opacity-100' : 'h-0 opacity-0'}`} />
+                <div className="w-6 flex items-center justify-center flex-shrink-0">
+                  <item.icon size={18} className={`transition-colors duration-200 ${isActive ? "text-orange-500" : "text-stone-400 group-hover:text-stone-600"}`} strokeWidth={isActive ? 2.5 : 2} />
+                </div>
+                <span className={`text-sm whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-w-[200px] opacity-100 ml-3' : 'max-w-0 opacity-0 ml-0'} ${isActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
               </Link>
             );
           })}
 
           <button 
-            className={`flex items-center ${sidebarOpen ? 'justify-center gap-2.5' : 'justify-center'} px-2.5 py-2 mt-1 text-[#EF4444] hover:bg-red-50 font-bold transition-all w-full rounded-lg`}
-            onClick={() => {
+            className={`flex items-center px-3 py-2.5 mt-2 text-red-500 hover:bg-red-50 hover:text-red-600 transition-all w-full rounded-xl group relative`}
+            onClick={async () => {
+              await logoutUser();
               localStorage.removeItem("token");
               localStorage.removeItem("user");
               window.location.href = "/login";
             }}
-            title={!sidebarOpen ? "Sign Out" : ""}
+            title={!isExpanded ? "Sign Out" : ""}
           >
-            <LogOut size={18} className="flex-shrink-0" strokeWidth={2.5} />
-            {sidebarOpen && <span className="text-sm">Sign Out</span>}
-          </button>
-          
-          {sidebarOpen && (
-            <div className="text-center mt-3 mb-1">
-              <span className="text-[11px] font-black text-stone-400 tracking-wider">V0.0.1</span>
+            <div className="w-6 flex items-center justify-center flex-shrink-0">
+              <LogOut size={18} className="group-hover:scale-110 transition-transform" strokeWidth={2} />
             </div>
-          )}
+            <span className={`text-sm font-bold whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-w-[200px] opacity-100 ml-3' : 'max-w-0 opacity-0 ml-0'}`}>Sign Out</span>
+          </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex-1 flex flex-col min-w-0 relative">
         
         {/* Header */}
-        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0 sticky top-0 z-30 shadow-sm">
+        <header className="h-16 bg-white/80 backdrop-blur-md border border-stone-200/60 rounded-2xl flex items-center justify-between px-4 sm:px-6 lg:px-6 flex-shrink-0 sticky top-4 z-30 shadow-[0_8px_30px_rgb(0,0,0,0.04)] mx-4 mt-4 lg:mx-6 lg:mr-8 lg:mt-4 transition-all duration-300">
           <div className="flex items-center gap-4">
             <button 
               className="lg:hidden text-stone-400 hover:text-stone-900"
@@ -336,7 +316,7 @@ export default function DashboardLayout({ children }) {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-hidden bg-[#FAFAFA] h-full">
+        <div className="flex-1 overflow-y-auto bg-transparent h-full pt-4 pb-8 px-4 lg:px-6 lg:pr-8 no-scrollbar">
           {children}
         </div>
         
