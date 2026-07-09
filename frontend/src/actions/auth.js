@@ -1,5 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
 
 export async function loginUser(identifier, password) {
   try {
@@ -26,6 +27,8 @@ export async function loginUser(identifier, password) {
         id: data._id, role: data.role, name: data.name, email: data.email, schoolId: data.schoolId
       }), { path: "/" });
 
+      revalidatePath('/', 'layout');
+
       return { success: true, user: data };
     } else {
       return { success: false, error: data.message || "Invalid credentials" };
@@ -39,4 +42,5 @@ export async function logoutUser() {
   const cookieStore = await cookies();
   cookieStore.delete("token");
   cookieStore.delete("user");
+  revalidatePath('/', 'layout');
 }

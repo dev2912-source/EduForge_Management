@@ -41,20 +41,37 @@ export default function DashboardLayout({ children }) {
   const [userInitials, setUserInitials] = useState("U");
 
   useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (userData) {
-      try {
-        const parsed = JSON.parse(userData);
-        setUserRole(parsed.role || "student");
-        
-        const name = parsed.name || "User";
-        setUserName(name);
-        setUserEmail(parsed.email || "");
-        setUserInitials(name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase());
-      } catch (e) {
-        console.error(e);
+    const checkAuth = () => {
+      const userData = localStorage.getItem("user");
+      if (userData) {
+        try {
+          const parsed = JSON.parse(userData);
+          setUserRole(parsed.role || "student");
+          
+          const name = parsed.name || "User";
+          setUserName(name);
+          setUserEmail(parsed.email || "");
+          setUserInitials(name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase());
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        window.location.href = "/login";
       }
-    }
+    };
+
+    // Initial check on mount
+    checkAuth();
+
+    // Listen for back/forward cache (bfcache) restore
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        checkAuth();
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    
+    return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
   const getNavItems = (role) => {
