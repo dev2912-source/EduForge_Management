@@ -38,7 +38,7 @@ export default function LandingPage() {
     // Phase 3: Completely unmount
     const timer3 = setTimeout(() => {
       setShowSplash(false);
-    }, 3000);
+    }, 3400);
     
     return () => { 
       clearTimeout(timer1); 
@@ -80,8 +80,15 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-stone-800 font-sans selection:bg-orange-100 selection:text-orange-500 overflow-x-hidden">
+    <div className="min-h-screen bg-[#fdfbf9] text-stone-800 font-sans selection:bg-orange-100 selection:text-orange-500 overflow-x-hidden relative">
       
+      {/* Global Background (Graph Paper + Ambient Glows) */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+        <div className="absolute top-1/4 left-1/4 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] bg-orange-400/10 rounded-full blur-[80px] mix-blend-multiply"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-yellow-400/10 rounded-full blur-[80px] mix-blend-multiply"></div>
+      </div>
+
       {/* Splash Screen */}
       <AnimatePresence>
         {showSplash && (
@@ -89,14 +96,9 @@ export default function LandingPage() {
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.6, ease: "easeInOut" }}
-            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#fdfbf9] overflow-hidden"
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center overflow-hidden"
           >
-            {/* Graph Paper Pattern Background */}
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
-            
-            {/* Ambient Glass Glows */}
-            <div className="absolute top-1/4 left-1/4 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] bg-orange-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-yellow-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
+            {/* The background is now global, so the splash just fades its content and its own white/transparent backdrop if needed. Since the global background is already there, we don't need a solid background color here, just let the content fade out. */}
             
             {/* Content Container */}
             <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-sm px-6">
@@ -124,7 +126,7 @@ export default function LandingPage() {
                       opacity: splashPhase === 'exit' ? 0 : 1,
                       y: splashPhase === 'exit' ? -50 : 0
                     }}
-                    transition={{ duration: splashPhase === 'exit' ? 0.6 : 0.6, ease: "backOut" }}
+                    transition={{ duration: splashPhase === 'exit' ? 1.2 : 0.6, ease: "backOut" }}
                     className="flex flex-col items-center"
                   >
                     <img src="/logo-main.png" alt="EduFordge" className="h-28 md:h-36 w-auto object-contain drop-shadow-2xl" />
