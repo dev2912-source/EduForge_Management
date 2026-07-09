@@ -1,3 +1,201 @@
+# Student Dashboard Enhancement Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Enhance the student dashboard with richer aggregated data, new sections (recent payments, quick actions, fee invoices), and a polished layout.
+
+**Architecture:** Enhance the existing `GET /api/dashboard/student` backend endpoint to aggregate profile, attendance stats, fee summary, today's timetable, recent payments, and recent leaves into a single response. Rewrite the `StudentDashboard.jsx` component to consume the enhanced endpoint and display new sections.
+
+**Tech Stack:** Next.js 16 App Router, Express.js, MongoDB/Mongoose
+
+---
+
+### Task 1: Backend — Enhance GET /api/dashboard/student
+
+**Files:**
+- Modify: `backend/routes/dashboardRoutes.js:200-231`
+
+**Interfaces:**
+- Consumes: `User`, `Attendance`, `Timetable`, `Invoice`, `Payment`, `LeaveRequest`, `SalarySlip` models (already imported or needed)
+- Produces: `GET /api/dashboard/student` returns:
+```json
+{
+  "profile": { "name", "email", "schoolId", "profile": { "className", "section", "rollNumber", "photoUrl", "medium" } },
+  "todayClock": "Present" | "Absent" | "Not In",
+  "attendanceStats": { "totalDays": 0, "presentDays": 0, "absentDays": 0, "percentage": 0 },
+  "feeSummary": { "totalDue": 0, "pendingCount": 0 },
+  "todaysClasses": [{ "subject", "teacher", "timeRange", "colorCode", "dayOfWeek" }],
+  "pendingLeaves": 0,
+  "recentPayments": [{ "_id", "receiptId", "amount", "method", "date", "status" }],
+  "recentLeaves": [{ "_id", "fromDate", "toDate", "reason", "status" }],
+  "pendingInvoices": [{ "_id", "invoiceId", "amount", "balance", "dueDate", "status" }]
+}
+```
+
+- [ ] **Step 1: Read the existing student dashboard endpoint**
+
+Read `backend/routes/dashboardRoutes.js` lines 200-231 to understand the current code.
+
+- [ ] **Step 2: Add missing model imports at the top of the student endpoint section**
+
+Add `Timetable`, `Payment`, `LeaveRequest` model imports after line 119 (`const SalarySlip = ...`):
+
+```js
+const Timetable = require('../models/Timetable');
+const Payment = require('../models/Payment');
+```
+
+(Invoice and Attendance are already imported via earlier imports at line 3-6. LeaveRequest and SalarySlip already imported at lines 118-120.)
+
+- [ ] **Step 3: Rewrite the `GET /api/dashboard/student` endpoint**
+
+Replace lines 200-231 with:
+
+```js
+// GET /api/dashboard/student
+router.get('/student', protect, async (req, res) => {
+    try {
+        if (req.user.role !== 'student') return res.status(403).json({ message: 'Not authorized' });
+
+        const user = await User.findById(req.user._id).select('-password');
+        const today = new Date();
+        today.setUTCHours(0,0,0,0);
+
+        // Today's attendance
+        const attendance = await Attendance.findOne({
+            student: req.user._id,
+            date: { $gte: today }
+        });
+
+        // Monthly attendance stats
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+        const monthRecords = await Attendance.find({
+            student: req.user._id,
+            date: { $gte: monthStart, $lte: monthEnd }
+        });
+        const totalDays = monthRecords.filter(r => !['Weekend', 'Holiday', 'Not marked'].includes(r.status)).length;
+        const presentDays = monthRecords.filter(r => r.status === 'Present').length;
+        const absentDays = monthRecords.filter(r => r.status === 'Absent').length;
+        const attendancePercentage = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0;
+
+        // Today's timetable
+        const className = user.profile?.className || 'Class 1';
+        const section = user.profile?.section || 'A';
+        const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+        const currentDayStr = dayNames[today.getDay()];
+        const todaysClasses = await Timetable.find({ className, section, dayOfWeek: currentDayStr }).sort({ period: 1 });
+
+        // Fee summary
+        const invoices = await Invoice.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }]
+        });
+        let totalDue = 0;
+        let pendingCount = 0;
+        invoices.forEach(inv => {
+            const bal = parseInt((inv.balance || inv.amount).replace(/[₹,]/g, '')) || 0;
+            if (inv.status === 'Pending' || inv.status === 'Partial') {
+                totalDue += bal;
+                pendingCount++;
+            }
+        });
+
+        // Pending leaves count
+        const pendingLeaves = await LeaveRequest.countDocuments({
+            student: req.user._id,
+            status: 'pending'
+        });
+
+        // Recent payments
+        const recentPayments = await Payment.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }]
+        }).sort({ createdAt: -1 }).limit(5);
+
+        // Recent leaves
+        const recentLeaves = await LeaveRequest.find({ student: req.user._id })
+            .sort({ createdAt: -1 }).limit(3);
+
+        // Pending invoices (for the invoices section)
+        const pendingInvoices = await Invoice.find({
+            $or: [{ student: req.user._id }, { studentName: user.name }],
+            status: { $in: ['Pending', 'Partial'] }
+        }).sort({ createdAt: -1 }).limit(5);
+
+        res.json({
+            profile: user,
+            todayClock: attendance ? (['Present', 'Late'].includes(attendance.status) ? 'Present' : attendance.status) : 'Not In',
+            attendanceStats: {
+                totalDays,
+                presentDays,
+                absentDays,
+                percentage: attendancePercentage
+            },
+            feeSummary: { totalDue, pendingCount },
+            todaysClasses,
+            pendingLeaves,
+            recentPayments: recentPayments.map(p => ({
+                _id: p._id,
+                receiptId: p.receiptId,
+                amount: p.amount,
+                method: p.method,
+                date: p.date || p.createdAt,
+                status: 'Paid'
+            })),
+            recentLeaves: recentLeaves.map(l => ({
+                _id: l._id,
+                fromDate: l.fromDate || l.start_date,
+                toDate: l.toDate || l.end_date,
+                reason: l.reason,
+                status: l.status
+            })),
+            pendingInvoices: pendingInvoices.map(inv => ({
+                _id: inv._id,
+                invoiceId: inv.invoiceId,
+                amount: inv.amount,
+                balance: inv.balance || inv.amount,
+                dueDate: inv.dueDate,
+                status: inv.status
+            }))
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching dashboard data' });
+    }
+});
+```
+
+- [ ] **Step 4: Verify no syntax errors**
+
+Run: `node -c backend/routes/dashboardRoutes.js`
+Expected: No output (no syntax errors)
+
+- [ ] **Step 5: Commit backend changes**
+
+```bash
+git add backend/routes/dashboardRoutes.js
+git commit -m "feat: enhance student dashboard endpoint with aggregated data"
+```
+
+---
+
+### Task 2: Frontend — Rewrite StudentDashboard.jsx
+
+**Files:**
+- Modify: `frontend/src/components/dashboard/StudentDashboard.jsx`
+
+**Interfaces:**
+- Consumes: `GET /api/dashboard/student` (enhanced endpoint from Task 1)
+- Produces: Complete student dashboard with header, 4 stats cards, timetable, recent payments, quick actions, leave requests, fee invoices
+
+- [ ] **Step 1: Read the current StudentDashboard.jsx**
+
+Read `frontend/src/components/dashboard/StudentDashboard.jsx` to understand existing structure.
+
+- [ ] **Step 2: Rewrite StudentDashboard.jsx**
+
+Replace the entire file with:
+
+```jsx
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -74,7 +272,7 @@ export default function StudentDashboard() {
     <div className="h-full flex flex-col gap-4 p-5 overflow-hidden bg-white">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-shrink-0 animate-slide-up">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-xl font-bold text-stone-900">{greeting}, {firstName}!</h1>
           <p className="text-sm text-stone-500 mt-0.5">{dateStr}</p>
@@ -88,7 +286,7 @@ export default function StudentDashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-shrink-0">
-        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-100">
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-[3px] h-4 bg-[#22C55E] rounded-full inline-block"></span>
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Attendance</span>
@@ -97,7 +295,7 @@ export default function StudentDashboard() {
           <p className="text-xs text-stone-400 mt-1.5">{attendanceStats.presentDays} of {attendanceStats.totalDays} days</p>
         </div>
 
-        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-200">
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-[3px] h-4 bg-[#EF4444] rounded-full inline-block"></span>
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Outstanding Fees</span>
@@ -106,7 +304,7 @@ export default function StudentDashboard() {
           <p className="text-xs text-stone-400 mt-1.5">{feeSummary.pendingCount} pending</p>
         </div>
 
-        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-300">
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-[3px] h-4 bg-[#F97316] rounded-full inline-block"></span>
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Leave</span>
@@ -115,7 +313,7 @@ export default function StudentDashboard() {
           <p className="text-xs text-stone-400 mt-1.5">pending requests</p>
         </div>
 
-        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-400">
+        <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-[3px] h-4 bg-[#3B82F6] rounded-full inline-block"></span>
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Today</span>
@@ -126,7 +324,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Today's Classes */}
-      <div className="bg-white border border-stone-200 rounded-xl shadow-sm flex-shrink-0 overflow-hidden animate-slide-up delay-300">
+      <div className="bg-white border border-stone-200 rounded-xl shadow-sm flex-shrink-0 overflow-hidden">
         <div className="px-4 py-3 flex items-center justify-between border-b border-stone-100">
           <div className="flex items-center gap-2">
             <span className="w-[3px] h-4 bg-[#F97316] rounded-full"></span>
@@ -158,7 +356,7 @@ export default function StudentDashboard() {
       {/* Two-Column Section: Recent Payments + Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-shrink-0">
         {/* Recent Payments */}
-        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden animate-slide-up delay-400">
+        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between border-b border-stone-100">
             <div className="flex items-center gap-2">
               <CreditCard size={14} className="text-stone-400" />
@@ -186,7 +384,7 @@ export default function StudentDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden animate-slide-up delay-400">
+        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-stone-100">
             <div className="flex items-center gap-2">
               <ArrowRight size={14} className="text-stone-400" />
@@ -217,7 +415,7 @@ export default function StudentDashboard() {
       {/* Two-Column Section: Leave Requests + Fee Invoices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
         {/* Leave Requests */}
-        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0 animate-slide-up delay-500">
+        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0">
           <div className="px-4 py-3 flex items-center justify-between border-b border-stone-100 flex-shrink-0">
             <div className="flex items-center gap-2">
               <span className="w-[3px] h-4 bg-[#F97316] rounded-full"></span>
@@ -255,7 +453,7 @@ export default function StudentDashboard() {
         </div>
 
         {/* Fee Invoices */}
-        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0 animate-slide-up delay-500">
+        <div className="bg-white border border-stone-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-0">
           <div className="px-4 py-3 flex items-center justify-between border-b border-stone-100 flex-shrink-0">
             <div className="flex items-center gap-2">
               <FileText size={14} className="text-stone-400" />
@@ -293,3 +491,42 @@ export default function StudentDashboard() {
     </div>
   );
 }
+```
+
+- [ ] **Step 3: Verify no build errors**
+
+Run: `npx next build --no-lint 2>&1 | findstr /i "error"` (from frontend directory) or simply check the component renders.
+
+- [ ] **Step 4: Commit frontend changes**
+
+```bash
+git add frontend/src/components/dashboard/StudentDashboard.jsx
+git commit -m "feat: rewrite student dashboard with enhanced data and new sections"
+```
+
+---
+
+## Self-Review
+
+### Spec Coverage
+- Header with greeting/date/class badge → covered (Task 2, section 1)
+- 4 stats cards (attendance, fees, leaves, today clock) → covered
+- Today's timetable horizontal scroll → covered
+- Recent Payments section → covered
+- Quick Actions section → covered
+- Leave Requests section → covered
+- Fee Invoices section → covered
+- Enhanced backend endpoint with aggregated data → covered (Task 1)
+- Single API call from frontend → covered
+- Loading/error states → covered
+
+### Placeholder Scan
+- No "TBD", "TODO", or "implement later" found
+- All code blocks contain complete code
+- All file paths are exact
+- All commands are exact
+
+### Type Consistency
+- `GET /api/dashboard/student` response shape defined in Task 1 matches consumption in Task 2
+- Field names: `attendanceStats.percentage`, `feeSummary.totalDue`, `pendingLeaves`, `todaysClasses`, `recentPayments`, `recentLeaves`, `pendingInvoices` all consistent across tasks
+- `todayClock` as string matches both backend mapping and frontend display

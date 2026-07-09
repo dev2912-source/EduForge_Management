@@ -157,7 +157,7 @@ export default function StaffDashboard() {
   return (
     <div className="space-y-4 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 animate-slide-up">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black text-white flex-shrink-0"
@@ -189,7 +189,7 @@ export default function StaffDashboard() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Today's Clock */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-100">
           <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-3">Today's Clock</p>
           <div className="flex items-center gap-2 mb-2">
             <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${CLOCK_COLORS[clockStatus]}`}>
@@ -209,7 +209,7 @@ export default function StaffDashboard() {
         </div>
 
         {/* This Month */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-200">
           <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-3">This Month</p>
           <div className="text-2xl font-black text-stone-900 leading-none">
             {month.present || 0} <span className="text-base font-semibold text-stone-400">/ {totalDays} days</span>
@@ -223,7 +223,7 @@ export default function StaffDashboard() {
         </div>
 
         {/* Leave Status */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-300">
           <p className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-3">Leave Status</p>
           <div className="flex items-center gap-2 flex-wrap">
             {pendingLeavesCount > 0
@@ -240,7 +240,7 @@ export default function StaffDashboard() {
       </div>
 
       {/* Today's Classes */}
-      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden animate-slide-up delay-400">
         <div className="px-5 py-3 border-b border-stone-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-1 h-3 bg-[#FF9933] rounded-full" />
@@ -278,7 +278,7 @@ export default function StaffDashboard() {
       {/* Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Latest Salary Slip */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-400">
           <div className="flex items-center gap-2 border-b border-stone-100 pb-3 mb-4">
             <div className="w-1 h-3 bg-[#FF9933] rounded-full" />
             <h2 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Latest Salary Slip</h2>
@@ -319,7 +319,7 @@ export default function StaffDashboard() {
         </div>
 
         {/* Recent Leave Requests */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-500">
           <div className="flex items-center gap-2 border-b border-stone-100 pb-3 mb-4">
             <div className="w-1 h-3 bg-[#FF9933] rounded-full" />
             <h2 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Recent Leave Requests</h2>
