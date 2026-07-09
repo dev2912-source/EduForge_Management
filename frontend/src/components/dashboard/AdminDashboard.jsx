@@ -12,7 +12,11 @@ import {
   ChevronRight,
   ArrowRight,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  GraduationCap,
+  BookOpen,
+  Landmark,
+  FileWarning
 } from "lucide-react";
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -252,15 +256,19 @@ export default function AdminDashboard() {
     <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))' }}>
       <div className="space-y-5">
         
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-black text-stone-900 tracking-tight">Dashboard</h1>
-            <p className="text-sm font-medium text-stone-600 mt-1">Welcome back, {userName}</p>
+        {/* Page Header (Campus Banner) */}
+        <div className="flex items-center justify-between bg-white/90 backdrop-blur-xl p-6 rounded-2xl border border-stone-200/60 shadow-sm relative overflow-hidden">
+          {/* Abstract academic background pattern */}
+          <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, black 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+          
+          <div className="relative z-10">
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight font-serif">Welcome to EduFordge</h1>
+            <p className="text-sm font-medium text-stone-500 mt-1 uppercase tracking-widest">Administrator Dashboard &middot; {userName}</p>
           </div>
+          
           <button
             onClick={() => fetchData(buildQuery())}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold text-stone-500 hover:text-stone-800 bg-white rounded-lg border border-stone-200 hover:border-stone-300 shadow-sm transition-all"
+            className="relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold text-stone-500 hover:text-stone-800 bg-white/90 backdrop-blur-xl rounded-lg border border-stone-200 hover:border-stone-300 shadow-sm transition-all"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
@@ -268,7 +276,7 @@ export default function AdminDashboard() {
         </div>
         
         {/* Top Control Bar */}
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 animate-slide-up">
           <div className="flex items-center gap-3">
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Period</span>
             <div className="flex bg-stone-100 rounded-lg p-0.5">
@@ -309,7 +317,7 @@ export default function AdminDashboard() {
                 <ChevronDown className="w-3 h-3 text-stone-400" />
               </button>
               {showMonthPicker && (
-                <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-stone-200 p-3 z-40 min-w-[220px]">
+                <div className="absolute left-0 top-full mt-1 bg-white/90 backdrop-blur-xl rounded-xl shadow-lg border border-stone-200 p-3 z-40 min-w-[220px]">
                   {period === 'year' ? (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between mb-2">
@@ -358,40 +366,52 @@ export default function AdminDashboard() {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           
-          <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/students')}>
-            <div className="absolute top-0 right-0 w-16 h-16 bg-orange-50 rounded-bl-[40px] flex items-end justify-start pl-2 pb-2">
-              <Users className="w-5 h-5 text-orange-400" strokeWidth={1.75} />
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-stone-200 shadow-sm p-4 sm:p-5 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-100" onClick={() => router.push('/dashboard/students')}>
+            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
+            <div className="absolute top-0 right-4 w-12 h-14 bg-orange-100 shadow-sm flex items-end justify-center pb-2" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)' }}>
+              <GraduationCap className="w-5 h-5 text-orange-500" strokeWidth={2} />
             </div>
-            <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">Students</p>
-            <p className="text-2xl font-bold text-stone-800 mt-1">{stats?.students}</p>
-            <p className="text-[10px] text-stone-400 mt-1">Active enrollment</p>
+            <div className="relative z-10 pt-2">
+              <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">Students</p>
+              <p className="text-3xl font-bold text-stone-800 mt-2 font-serif">{stats?.students}</p>
+              <p className="text-[10px] font-medium text-stone-500 mt-1">Active enrollment</p>
+            </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/staff')}>
-            <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-[40px] flex items-end justify-start pl-2 pb-2">
-              <UserSquare2 className="w-5 h-5 text-emerald-500" strokeWidth={1.75} />
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-stone-200 shadow-sm p-4 sm:p-5 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-200" onClick={() => router.push('/dashboard/staff')}>
+            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
+            <div className="absolute top-0 right-4 w-12 h-14 bg-emerald-100 shadow-sm flex items-end justify-center pb-2" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)' }}>
+              <BookOpen className="w-5 h-5 text-emerald-600" strokeWidth={2} />
             </div>
-            <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">Staff</p>
-            <p className="text-2xl font-bold text-stone-800 mt-1">{stats?.staff}</p>
-            <p className="text-[10px] text-stone-400 mt-1">Active members</p>
+            <div className="relative z-10 pt-2">
+              <p className="text-[10px] font-black text-stone-400 uppercase tracking-wider">Staff</p>
+              <p className="text-3xl font-bold text-stone-800 mt-2 font-serif">{stats?.staff}</p>
+              <p className="text-[10px] font-medium text-stone-500 mt-1">Active members</p>
+            </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/finance/payments')}>
-            <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-[40px] flex items-end justify-start pl-2 pb-2">
-              <IndianRupee className="w-5 h-5 text-green-500" strokeWidth={1.75} />
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-stone-200 shadow-sm p-4 sm:p-5 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-300" onClick={() => router.push('/dashboard/finance/payments')}>
+            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
+            <div className="absolute top-0 right-4 w-12 h-14 bg-green-100 shadow-sm flex items-end justify-center pb-2" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)' }}>
+              <Landmark className="w-5 h-5 text-green-600" strokeWidth={2} />
             </div>
-            <p className="text-[10px] font-black text-green-500 uppercase tracking-wider">Collected</p>
-            <p className="text-2xl font-bold text-green-600 mt-1">{stats?.collected}</p>
-            <p className="text-[10px] text-stone-400 mt-1">Total fees received</p>
+            <div className="relative z-10 pt-2">
+              <p className="text-[10px] font-black text-green-600 uppercase tracking-wider">Collected</p>
+              <p className="text-3xl font-bold text-green-700 mt-2 font-serif">{stats?.collected}</p>
+              <p className="text-[10px] font-medium text-stone-500 mt-1">Total fees received</p>
+            </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-stone-200 shadow-sm p-4 relative overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={() => router.push('/dashboard/finance/invoices')}>
-            <div className="absolute top-0 right-0 w-16 h-16 bg-red-50 rounded-bl-[40px] flex items-end justify-start pl-2 pb-2">
-              <AlertCircle className="w-5 h-5 text-red-400" strokeWidth={1.75} />
+          <div className="bg-white/90 backdrop-blur-xl rounded-xl border border-stone-200 shadow-sm p-4 sm:p-5 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 animate-slide-up delay-400" onClick={() => router.push('/dashboard/finance/invoices')}>
+            <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '12px 12px' }}></div>
+            <div className="absolute top-0 right-4 w-12 h-14 bg-red-100 shadow-sm flex items-end justify-center pb-2" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%)' }}>
+              <FileWarning className="w-5 h-5 text-red-600" strokeWidth={2} />
             </div>
-            <p className="text-[10px] font-black text-red-400 uppercase tracking-wider">Outstanding</p>
-            <p className="text-2xl font-bold text-red-500 mt-1">{stats?.outstanding}</p>
-            <p className="text-[10px] text-stone-400 mt-1">{pendingCount || 0} pending invoices</p>
+            <div className="relative z-10 pt-2">
+              <p className="text-[10px] font-black text-red-500 uppercase tracking-wider">Outstanding</p>
+              <p className="text-3xl font-bold text-red-600 mt-2 font-serif">{stats?.outstanding}</p>
+              <p className="text-[10px] font-medium text-stone-500 mt-1">{pendingCount || 0} pending invoices</p>
+            </div>
           </div>
 
         </div>
@@ -399,7 +419,7 @@ export default function AdminDashboard() {
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+          <div className="lg:col-span-2 bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm p-5 animate-slide-up delay-200">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-black text-stone-800 uppercase tracking-widest">Revenue Overview</h2>
@@ -413,7 +433,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm p-5 animate-slide-up delay-300">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-black text-stone-800 uppercase tracking-widest">Payment Methods</h2>
@@ -428,7 +448,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm p-5 animate-slide-up delay-400">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-black text-stone-800 uppercase tracking-widest">Invoice Status</h2>
@@ -446,7 +466,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-stone-200 shadow-sm p-5">
+          <div className="lg:col-span-2 bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm p-5 animate-slide-up delay-500">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-black text-stone-800 uppercase tracking-widest">Class-wise Collection</h2>
@@ -467,7 +487,7 @@ export default function AdminDashboard() {
         {/* Tables */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col animate-slide-up delay-300">
             <div className="p-5 border-b border-stone-200 flex justify-between items-center">
               <h3 className="font-bold text-lg text-stone-900">Recent Payments</h3>
               <button
@@ -503,7 +523,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col animate-slide-up delay-400">
             <div className="p-5 border-b border-stone-200 flex justify-between items-center">
               <h3 className="font-bold text-lg text-stone-900">Pending Invoices</h3>
               <button
