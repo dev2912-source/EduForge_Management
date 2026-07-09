@@ -13,15 +13,24 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
+
+// Global variable that resets ONLY on a full page refresh
+let hasSeenSplashInSession = false;
+
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
   const yParallax = useTransform(scrollYProgress, [0, 1], [0, -150]);
-  const [showSplash, setShowSplash] = useState(true);
-  const [splashPhase, setSplashPhase] = useState('icon'); // 'icon' -> 'logo' -> 'exit'
+  const [showSplash, setShowSplash] = useState(!hasSeenSplashInSession);
+  const [splashPhase, setSplashPhase] = useState(hasSeenSplashInSession ? 'exit' : 'icon'); 
   const [isAnnual, setIsAnnual] = useState(false);
   const contactFormRef = useRef(null);
 
   useEffect(() => {
+    if (hasSeenSplashInSession) {
+      setShowSplash(false);
+      return;
+    }
+
     // Prevent scrolling while splash is visible
     document.body.style.overflow = 'hidden';
     
@@ -39,6 +48,7 @@ export default function LandingPage() {
     // Phase 3: Completely unmount
     const timer3 = setTimeout(() => {
       setShowSplash(false);
+      hasSeenSplashInSession = true;
     }, 3400);
     
     return () => { 
