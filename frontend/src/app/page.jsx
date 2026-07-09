@@ -8,34 +8,43 @@ import {
   CreditCard,
   CalendarDays,
   Zap,
-  ChevronDown
+  Zap,
+  ChevronDown,
+  BookOpen
 } from 'lucide-react';
 import Image from 'next/image';
-
+import { motion, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 export default function LandingPage() {
+  const { scrollYProgress } = useScroll();
+  const yParallax = useTransform(scrollYProgress, [0, 1], [0, -150]);
   const [showSplash, setShowSplash] = useState(true);
-  const [splashOpacity, setSplashOpacity] = useState(100);
-  const [progress, setProgress] = useState(0);
+  const [splashPhase, setSplashPhase] = useState('icon'); // 'icon' -> 'logo' -> 'exit'
   const contactFormRef = useRef(null);
 
   useEffect(() => {
     // Prevent scrolling while splash is visible
     document.body.style.overflow = 'hidden';
     
-    // Trigger progress bar animation
-    const timer0 = setTimeout(() => setProgress(100), 100);
-    // Start fade out
+    // Phase 1: Icon morphs into logo
     const timer1 = setTimeout(() => {
-      setSplashOpacity(0);
+      setSplashPhase('logo');
+    }, 800);
+
+    // Phase 2: Fade out overlay, shrink logo
+    const timer2 = setTimeout(() => {
+      setSplashPhase('exit');
       document.body.style.overflow = 'auto';
-    }, 2000);
-    // Unmount
-    const timer2 = setTimeout(() => setShowSplash(false), 2500);
+    }, 2200);
+
+    // Phase 3: Completely unmount
+    const timer3 = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
     
     return () => { 
-      clearTimeout(timer0); 
       clearTimeout(timer1); 
       clearTimeout(timer2); 
+      clearTimeout(timer3); 
       document.body.style.overflow = 'auto';
     };
   }, []);
@@ -75,22 +84,86 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white text-stone-800 font-sans selection:bg-orange-100 selection:text-orange-500 overflow-x-hidden">
       
       {/* Splash Screen */}
-      {showSplash && (
-        <div 
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white transition-opacity duration-500 ease-in-out"
-          style={{ opacity: splashOpacity / 100 }}
-        >
-          <div className="flex flex-col items-center animate-pulse">
-            <img src="/logo-main.png" alt="EduFordge" className="h-32 md:h-48 w-auto mb-10 object-contain drop-shadow-xl" />
-          </div>
-          <div className="w-64 h-1.5 bg-stone-100 rounded-full overflow-hidden relative">
-            <div 
-              className="absolute top-0 left-0 h-full bg-orange-400 rounded-full transition-all duration-[1800ms] ease-out" 
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div 
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: "easeInOut" }}
+            className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#fdfbf9] overflow-hidden"
+          >
+            {/* Graph Paper Pattern Background */}
+            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+            
+            {/* Ambient Glass Glows */}
+            <div className="absolute top-1/4 left-1/4 w-[50vw] h-[50vw] max-w-[600px] max-h-[600px] bg-orange-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-[40vw] h-[40vw] max-w-[500px] max-h-[500px] bg-yellow-400/10 rounded-full blur-[80px] pointer-events-none mix-blend-multiply"></div>
+            
+            {/* Content Container */}
+            <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-sm px-6">
+              
+              <AnimatePresence mode="wait">
+                {splashPhase === 'icon' && (
+                  <motion.div
+                    key="icon"
+                    initial={{ scale: 0.5, opacity: 0, rotateY: 90 }}
+                    animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+                    exit={{ scale: 1.2, opacity: 0, filter: 'blur(10px)' }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="w-24 h-24 bg-white shadow-xl shadow-orange-400/20 rounded-3xl flex items-center justify-center border border-orange-100"
+                  >
+                    <BookOpen size={48} className="text-orange-400" strokeWidth={1.5} />
+                  </motion.div>
+                )}
+
+                {(splashPhase === 'logo' || splashPhase === 'exit') && (
+                  <motion.div
+                    key="logo"
+                    initial={{ scale: 0.8, opacity: 0, y: 20 }}
+                    animate={{ 
+                      scale: splashPhase === 'exit' ? 0.6 : 1, 
+                      opacity: splashPhase === 'exit' ? 0 : 1,
+                      y: splashPhase === 'exit' ? -50 : 0
+                    }}
+                    transition={{ duration: splashPhase === 'exit' ? 0.6 : 0.6, ease: "backOut" }}
+                    className="flex flex-col items-center"
+                  >
+                    <img src="/logo-main.png" alt="EduFordge" className="h-28 md:h-36 w-auto object-contain drop-shadow-2xl" />
+                    
+                    {/* Glowing Circular Progress Loader */}
+                    {splashPhase === 'logo' && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.3 }}
+                        className="mt-12 relative flex items-center justify-center"
+                      >
+                        <svg className="w-14 h-14 -rotate-90 transform drop-shadow-md" viewBox="0 0 100 100">
+                          <circle cx="50" cy="50" r="45" fill="none" stroke="#ffedd5" strokeWidth="6" />
+                          <motion.circle 
+                            cx="50" cy="50" r="45" 
+                            fill="none" 
+                            stroke="#f97316" 
+                            strokeWidth="6" 
+                            strokeLinecap="round"
+                            initial={{ strokeDasharray: "0 283" }}
+                            animate={{ strokeDasharray: "283 283" }}
+                            transition={{ duration: 1.2, ease: "easeInOut" }}
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-ping"></div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Navigation */}
       <nav className="w-full bg-white/95 backdrop-blur-md border-b border-stone-100 py-4 sticky top-0 z-50">
@@ -131,8 +204,14 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-8 lg:pt-12 pb-24">
-        <div className="max-w-[1200px] mx-auto px-6 lg:px-10">
+      <section className="relative pt-8 lg:pt-12 pb-24 overflow-hidden">
+        {/* Ambient Blobs */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none -z-10">
+           <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-orange-400/20 blur-[100px] animate-blob"></div>
+           <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] rounded-full bg-yellow-400/20 blur-[100px] animate-blob animation-delay-2000"></div>
+           <div className="absolute bottom-[-10%] left-[20%] w-[35%] h-[35%] rounded-full bg-pink-400/20 blur-[100px] animate-blob animation-delay-4000"></div>
+        </div>
+        <div className="max-w-[1200px] mx-auto px-6 lg:px-10 relative z-10">
           <div className="grid lg:grid-cols-[1fr_1.1fr] gap-12 lg:gap-8 items-center">
             
             {/* Left Content */}
@@ -143,10 +222,22 @@ export default function LandingPage() {
                 BUILT FOR INDIAN SCHOOLS
               </div>
               
-              <h1 className="text-[3.5rem] lg:text-[4.5rem] font-black tracking-tight leading-[1.05] mb-6 text-stone-900">
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="text-[3.5rem] lg:text-[4.5rem] font-black tracking-tight leading-[1.05] mb-6 text-stone-900"
+              >
                 The smarter way to <br/>
-                <span className="text-orange-400">run your school</span>
-              </h1>
+                <motion.span 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3, duration: 0.8 }}
+                  className="text-orange-400"
+                >
+                  run your school
+                </motion.span>
+              </motion.h1>
               
               <p className="text-lg text-stone-500 font-medium leading-relaxed mb-10 max-w-lg">
                 Admissions, fees, salary, classes — managed from one place.<br/>
@@ -187,7 +278,7 @@ export default function LandingPage() {
             </div>
 
             {/* Right Graphic: Before & After */}
-            <div className="hidden lg:flex relative w-full h-[500px] rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="hidden lg:flex relative w-full h-[500px] rounded-[2.5rem] overflow-hidden shadow-2xl animate-float">
                
                {/* Left Side: Before */}
                <div className="w-[55%] h-full bg-[#f8f3eb] relative p-8 border-r-2 border-dashed border-orange-200/50">
@@ -364,7 +455,6 @@ export default function LandingPage() {
                   </div>
 
                </div>
-
             </div>
 
           </div>
@@ -372,7 +462,13 @@ export default function LandingPage() {
       </section>
 
       {/* Stats Strip */}
-      <div className="bg-white border-t border-stone-100 py-10 mt-10 relative z-10">
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-50px" }}
+        transition={{ duration: 0.6 }}
+        className="bg-white border-t border-stone-100 py-10 mt-10 relative z-10"
+      >
         <div className="max-w-[1400px] mx-auto px-6 lg:px-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-stone-100">
             {[
@@ -388,7 +484,7 @@ export default function LandingPage() {
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Stats/Feature Grid */}
       <section id="features" className="bg-[#fdfbf9] py-24 relative z-10">
@@ -401,7 +497,13 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-16">
             {/* Feature 1 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.0 }}
+              className="hover:-translate-y-1.5 transition-transform duration-300"
+            >
                <div className="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-orange-500 mb-6">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                </div>
@@ -409,10 +511,16 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  Automate fee invoices, salary slips, and reports that used to take your staff days to prepare by hand.
                </p>
-            </div>
+            </motion.div>
 
             {/* Feature 2 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="hover:-translate-y-1.5 transition-transform duration-300"
+            >
                <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 mb-6">
                   <FileText size={20} strokeWidth={2.5} />
                </div>
@@ -420,10 +528,16 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  Move student records, registers, and files off paper and into one secure digital system.
                </p>
-            </div>
+            </motion.div>
 
             {/* Feature 3 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="hover:-translate-y-1.5 transition-transform duration-300"
+            >
                <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-500 mb-6">
                   <CreditCard size={20} strokeWidth={2.5} />
                </div>
@@ -431,10 +545,15 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  Auto-generated monthly invoices, instant payment recording, and PDF receipts keep collections on track.
                </p>
-            </div>
+            </motion.div>
 
             {/* Feature 4 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+            >
                <div className="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-500 mb-6">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
                </div>
@@ -442,10 +561,15 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  See fee collection, attendance, and staff data at a glance — no more waiting on manual registers.
                </p>
-            </div>
+            </motion.div>
 
             {/* Feature 5 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+            >
                <div className="w-12 h-12 bg-teal-100 rounded-2xl flex items-center justify-center text-teal-600 mb-6">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg>
                </div>
@@ -453,10 +577,15 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  A web app for admins and a free Android app for staff and students — available wherever they are.
                </p>
-            </div>
+            </motion.div>
 
             {/* Feature 6 */}
-            <div>
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+            >
                <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center text-red-500 mb-6">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 11 14 15 10"></polyline></svg>
                </div>
@@ -464,7 +593,7 @@ export default function LandingPage() {
                <p className="text-sm font-medium text-stone-500 leading-relaxed">
                  Each school's data is kept separate, access is controlled by role, and records are backed up automatically.
                </p>
-            </div>
+            </motion.div>
           </div>
 
         </div>
@@ -482,7 +611,13 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             
             {/* Module 1 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.0 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center text-orange-500 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                </div>
@@ -490,10 +625,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Admissions, profiles, academic history, promotions, and document storage. Every student's journey in one place.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 2 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                </div>
@@ -501,10 +642,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Manage staff profiles, departments, and salary structures. Monthly payslips generated and emailed automatically.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 3 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
                </div>
@@ -512,10 +659,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Automated monthly invoices per student, payment recording, and PDF receipts. Track pending and paid fees instantly.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 4 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                </div>
@@ -523,10 +676,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Set up academic years, classes, and sections. Promote entire batches to next class in a single action at year end.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 5 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                </div>
@@ -534,10 +693,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Fee invoices, payment receipts, and salary slips are auto-generated as PDFs, stored securely, and emailed to users.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 6 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.5 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-xl hover:shadow-orange-400/20 hover:-translate-y-1.5 transition-all duration-300"
+            >
                <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                </div>
@@ -545,10 +710,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Full-featured web app for admins. A dedicated Android app — built with your school's name and icon — for staff and students to access records on the go.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 7 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+            >
                <div className="w-10 h-10 bg-pink-50 rounded-xl flex items-center justify-center text-pink-500 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
                </div>
@@ -556,10 +727,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Your school gets its own subdomain, branding, and a custom-built Android app — your name, your logo, your colors. Students never see "EduFordge".
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 8 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.7 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+            >
                <div className="w-10 h-10 bg-yellow-50 rounded-xl flex items-center justify-center text-yellow-600 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                </div>
@@ -567,10 +744,16 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Daily student attendance, staff clock-in/out, and leave requests — all tracked digitally with reports on demand.
                </p>
-            </div>
+            </motion.div>
 
             {/* Module 9 */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow">
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.8 }}
+              className="bg-white p-6 rounded-3xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+            >
                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 mb-5">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                </div>
@@ -578,7 +761,7 @@ export default function LandingPage() {
                <p className="text-[13px] font-medium text-stone-500 leading-relaxed">
                  Built-in help desk so staff and students can raise issues and get them resolved without endless phone calls.
                </p>
-            </div>
+            </motion.div>
 
           </div>
 
@@ -592,7 +775,14 @@ export default function LandingPage() {
             <h2 className="text-orange-400 font-bold text-[11px] uppercase tracking-[0.2em] mb-4">SEE IT IN ACTION</h2>
             <h3 className="text-4xl font-black tracking-tight text-stone-900 leading-[1.2]">A clean, modern dashboard<br/>your staff will love</h3>
           </div>
-          <div className="bg-stone-50 rounded-[2rem] p-4 border border-stone-200 shadow-xl overflow-hidden flex items-center justify-center min-h-[500px]">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, rotateX: 10 }}
+            whileInView={{ opacity: 1, scale: 1, rotateX: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.8, type: "spring", bounce: 0.3 }}
+            className="bg-stone-50 rounded-[2rem] p-4 border border-stone-200 shadow-xl overflow-hidden flex items-center justify-center min-h-[500px]"
+            style={{ perspective: 1000 }}
+          >
              {/* Dashboard Mockup */}
              <div className="w-full max-w-4xl bg-white rounded-xl shadow-sm border border-stone-100 h-[400px] flex flex-col overflow-hidden">
                 <div className="h-12 border-b border-stone-100 flex items-center px-4 gap-2 bg-stone-50/50">
@@ -618,7 +808,7 @@ export default function LandingPage() {
                    </div>
                 </div>
              </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -631,29 +821,47 @@ export default function LandingPage() {
           </div>
           
           <div className="grid md:grid-cols-2 gap-4 mb-16 h-auto md:h-[500px]">
-             <div className="relative rounded-3xl overflow-hidden group h-[300px] md:h-full">
+             <motion.div 
+               initial={{ scale: 1.2, opacity: 0 }}
+               whileInView={{ scale: 1, opacity: 1 }}
+               viewport={{ once: true }}
+               transition={{ duration: 0.8, ease: "easeOut" }}
+               className="relative rounded-3xl overflow-hidden group h-[300px] md:h-full"
+             >
                 <img src="https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=2070&auto=format&fit=crop" alt="Indian students in classroom" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
                 <div className="absolute bottom-6 left-6">
                    <h4 className="text-white font-bold tracking-widest text-xs uppercase">CLASSROOMS</h4>
                 </div>
-             </div>
+             </motion.div>
              
              <div className="flex flex-col gap-4 h-[500px] md:h-full">
-                <div className="relative rounded-3xl overflow-hidden flex-1 group">
+                <motion.div 
+                   initial={{ scale: 1.2, opacity: 0 }}
+                   whileInView={{ scale: 1, opacity: 1 }}
+                   viewport={{ once: true }}
+                   transition={{ duration: 0.8, ease: "easeOut" }}
+                   className="relative rounded-3xl overflow-hidden flex-1 group"
+                >
                    <img src="https://images.unsplash.com/photo-1503676260728-1c00da094a0b?q=80&w=2022&auto=format&fit=crop" alt="Students learning" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
                    <div className="absolute bottom-6 left-6">
                       <h4 className="text-white font-bold tracking-widest text-xs uppercase">LEARNING</h4>
                    </div>
-                </div>
-                <div className="relative rounded-3xl overflow-hidden flex-1 group">
+                </motion.div>
+                <motion.div 
+                   initial={{ scale: 1.2, opacity: 0 }}
+                   whileInView={{ scale: 1, opacity: 1 }}
+                   viewport={{ once: true }}
+                   transition={{ duration: 0.8, ease: "easeOut" }}
+                   className="relative rounded-3xl overflow-hidden flex-1 group"
+                >
                    <img src="https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?q=80&w=2070&auto=format&fit=crop" alt="Student focus" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
                    <div className="absolute bottom-6 left-6">
                       <h4 className="text-white font-bold tracking-widest text-xs uppercase">FOCUS</h4>
                    </div>
-                </div>
+                </motion.div>
              </div>
           </div>
           
@@ -984,7 +1192,7 @@ export default function LandingPage() {
             
             <div className="pt-8 border-t border-stone-800 text-xs font-medium text-stone-500 flex flex-col md:flex-row justify-between items-center gap-4">
                <p>© {new Date().getFullYear()} EduFordge. All rights reserved.</p>
-               <p>Made with 🧡 in India by <a href="#" className="text-stone-400 hover:text-white">9ovind.in</a></p>
+               <p>Made with 🧡 in India by <span className="text-stone-400 font-medium">Dev</span></p>
             </div>
          </div>
       </footer>
